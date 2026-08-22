@@ -96,6 +96,26 @@ class SketchSession {
 
 export const session = new SketchSession();
 
+/**
+ * Camera actions, registered by the app once the viewport exists.
+ *
+ * The view controls moved into a menu in the top bar, several levels away from
+ * where the viewport is created. Registering the handlers here beats threading
+ * four callbacks through every component in between.
+ */
+export interface ViewActions {
+  preset: (theta: number, phi: number) => void;
+  nudge: (deltaTheta: number, deltaPhi: number) => void;
+  zoom: (factor: number) => void;
+  frameAll: () => void;
+}
+
+let viewActions: ViewActions | null = null;
+export const setViewActions = (actions: ViewActions | null): void => {
+  viewActions = actions;
+};
+export const getViewActions = (): ViewActions | null => viewActions;
+
 /** Set by the viewport once it exists, so saves can capture a thumbnail. */
 let thumbnailProvider: (() => string | null) | null = null;
 export const setThumbnailProvider = (provider: (() => string | null) | null): void => {
@@ -141,6 +161,8 @@ interface AppState {
   clipboard: SceneNode[];
   /** Live rubber-band rectangle in CSS pixels, or null when not dragging. */
   marquee: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** Screen position the selection toolbar follows. */
+  selectionAnchor: { x: number; y: number } | null;
 
   setTool: (tool: ToolId) => void;
   setStyle: (patch: Partial<StrokeStyle>) => void;
@@ -165,6 +187,7 @@ interface AppState {
 
   setSelection: (ids: string[]) => void;
   setMarquee: (rect: { x0: number; y0: number; x1: number; y1: number } | null) => void;
+  setSelectionAnchor: (point: { x: number; y: number } | null) => void;
   toggleSelected: (id: string, additive: boolean) => void;
   clearSelection: () => void;
   selectLayer: (layerId: string) => void;
@@ -237,6 +260,7 @@ export const useStore = create<AppState>((set, get) => ({
   selection: [],
   clipboard: [],
   marquee: null,
+  selectionAnchor: null,
 
   setTool: (tool) => set({ tool }),
   setStyle: (patch) =>
@@ -574,6 +598,8 @@ export const useStore = create<AppState>((set, get) => ({
   setSelection: (ids) => set({ selection: ids }),
 
   setMarquee: (marquee) => set({ marquee }),
+
+  setSelectionAnchor: (selectionAnchor) => set({ selectionAnchor }),
 
   toggleSelected: (id, additive) =>
     set((state) => {

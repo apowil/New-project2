@@ -494,6 +494,62 @@ export class Viewport {
     };
   }
 
+  /** Bounding box of the given nodes, or null when none are present. */
+  boundsOf(ids: readonly string[]): THREE.Box3 | null {
+    const box = new THREE.Box3();
+    let found = false;
+
+    for (const id of ids) {
+      const entry = this.entries.get(id);
+      if (!entry) continue;
+      box.expandByObject(entry.mesh);
+      found = true;
+    }
+
+    return found ? box : null;
+  }
+
+  /**
+   * Where to hang a toolbar over a set of nodes: horizontally centred on them,
+   * vertically at their topmost point on screen.
+   *
+   * All eight corners of the bounding box are projected rather than just the
+   * centre — a box's screen extent depends on the viewing angle, and anchoring
+   * to the centre puts the bar on top of whatever it is describing.
+   */
+  screenCentreOf(ids: readonly string[]): { x: number; y: number } | null {
+    const box = this.boundsOf(ids);
+    if (!box || box.isEmpty()) return null;
+
+    const width = this.canvas.clientWidth || 1;
+    const height = this.canvas.clientHeight || 1;
+    const corner = new THREE.Vector3();
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+
+    for (let i = 0; i < 8; i += 1) {
+      corner.set(
+        i & 1 ? box.max.x : box.min.x,
+        i & 2 ? box.max.y : box.min.y,
+        i & 4 ? box.max.z : box.min.z,
+      );
+      corner.project(this.camera.camera);
+      // Behind the camera projects to a mirrored point, which would drag the
+      // anchor to the wrong side of the screen.
+      if (corner.z > 1) return null;
+
+      const screenX = ((corner.x + 1) / 2) * width;
+      const screenY = ((1 - corner.y) / 2) * height;
+      minX = Math.min(minX, screenX);
+      maxX = Math.max(maxX, screenX);
+      minY = Math.min(minY, screenY);
+    }
+
+    return { x: (minX + maxX) / 2, y: minY };
+  }
+
   /** Bounding box of everything drawn, for "frame all". */
   contentBounds(): THREE.Box3 {
     const box = new THREE.Box3();

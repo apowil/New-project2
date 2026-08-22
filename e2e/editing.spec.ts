@@ -136,17 +136,55 @@ test.describe('selection', () => {
     await expect.poll(() => selectionCount(page)).toBe(0);
   });
 
-  test('the selection panel only appears with a selection', async ({ page }) => {
+  test('the action bar appears over the selection', async ({ page }) => {
     await ready(page);
     await drawCrossingPair(page);
-    await expect(page.getByText('2 selected')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Copy' })).toBeHidden();
 
     await page.keyboard.press('s');
     await drag(page, [
       [200, 120],
       [1100, 680],
     ]);
-    await expect(page.getByText('2 selected')).toBeVisible();
+
+    const copy = page.getByRole('button', { name: 'Copy' });
+    await expect(copy).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Delete' })).toBeVisible();
+  });
+
+  test('dragging a selected stroke moves it', async ({ page }) => {
+    await ready(page);
+    await drawCrossingPair(page);
+
+    await page.keyboard.press('s');
+    await page.mouse.click(640, 520);
+    await expect.poll(() => selectionCount(page)).toBe(1);
+
+    const centreX = () =>
+      page.evaluate(() => {
+        const id = window.__wisp.store.getState().selection[0]!;
+        const node = window.__wisp.session.document.nodes.get(id) as {
+          samples: Array<{ position: { x: number } }>;
+        };
+        return (
+          node.samples.reduce((total, s) => total + s.position.x, 0) / node.samples.length
+        );
+      });
+
+    const before = await centreX();
+    await drag(page, [
+      [640, 520],
+      [860, 460],
+    ]);
+    const after = await centreX();
+
+    expect(Math.abs(after - before)).toBeGreaterThan(0.05);
+
+    // The whole drag is one history entry, not one per pointer move.
+    expect(await page.evaluate(() => window.__wisp.store.getState().undoLabel)).toBe('Move');
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    expect(await centreX()).toBeCloseTo(before, 4);
   });
 });
 
@@ -254,7 +292,7 @@ test.describe('boolean operations', () => {
     await page.mouse.click(640, 500);
     await expect.poll(() => selectionCount(page)).toBe(1);
 
-    await expect(page.getByRole('button', { name: 'Merge', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Combine' })).toBeDisabled();
   });
 });
 

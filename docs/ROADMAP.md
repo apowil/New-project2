@@ -75,22 +75,49 @@ Added after reviewing what Feather actually ships:
 - **Project management** — rename and duplicate from the library, alongside
   open, delete, import and export.
 
+## Stage 2 — Selecting, combining and organising ✅
+
+- **Selection** — tap a stroke, shift-tap to add, drag a box for several.
+  Selected geometry is tinted emissively rather than outlined: no extra render
+  pass, and it reads on both light and dark grounds.
+- **Move** — dragging a selected item moves the whole selection along a plane
+  facing the camera. The drag is live but lands in history as one entry.
+- **Boolean operations** — Merge, Subtract and Intersect via three-bvh-csg,
+  plus Combine, which concatenates without cutting and so works on shapes a
+  true boolean cannot evaluate.
+- **Clipboard** — copy, cut and paste, including pasting into a different
+  layer. Nodes are cloned on copy *and* on paste, so no two nodes ever share a
+  buffer and pasting twice gives two independent copies.
+- **Layers** — merge down, duplicate with contents, move a selection between
+  layers, select a layer's contents.
+- **Contextual toolbar** — the actions for a selection appear over the
+  selection rather than in a corner panel.
+
+### What a boolean can and cannot do
+
+A stroke is a swept tube with caps, so on its own it is a closed manifold
+solid and CSG handles it. What CSG cannot handle is a solid that intersects
+*itself* — a stroke that loops back across its own body has no well-defined
+inside. That is a property of the shape, not something the code can fix, so
+the failure is reported and Combine is offered as the way through.
+
+The result is a **baked mesh**: once two tubes are cut against each other the
+surface no longer corresponds to any centreline, so it cannot be re-swept at a
+different width afterwards. The file format carries baked geometry alongside
+stroke samples, and its version went to 2.
+
 ---
 
 ## Still to build
 
-### Stage 2 — Objects and editing
+### Stage 2 continued — objects
 
 - Primitives: box, sphere, cylinder, cone, ring — **as drawing surfaces**, not
   just objects. Feather's approach is to draw *onto* a primitive, which pairs
   with the surface-anchored sketch plane already built.
-- Select (tap, box-select, multi-select) with an outline highlight
-- Transform widget. Feather uses a **joystick-style** multi-directional widget
-  rather than three thin axis arrows — far easier to hit with a finger, and
-  worth copying over a conventional gizmo.
+- Rotate and scale a selection. Feather uses a **joystick-style** widget rather
+  than three thin axis arrows — far easier to hit with a finger.
 - Snapping to vertices, edges, midpoints, faces and the ground
-- Group, duplicate, mirror existing geometry (as opposed to mirroring as you
-  draw, which stage 1.5 covers)
 - Partial eraser — split a stroke instead of deleting the whole thing
 
 ### Stage 2.5 — Liquify
@@ -160,9 +187,13 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
 
 ## Known gaps right now
 
-- Strokes cannot be edited after they are committed — only deleted
-- No selection, so the eraser is the only way to remove anything
+- A stroke's shape cannot be edited after it is drawn — it can be moved,
+  combined and deleted, but not reshaped (liquify, stage 2.5)
+- Selection moves but does not rotate or scale yet
 - No export beyond `.wisp` — no glTF, OBJ or image output yet
+- Booleans run on the main thread; a very dense selection will pause the UI
+  for a moment. This is the first operation that should move to the compute
+  link in stage 5.
 - Symmetry reflects across the **world** planes, so it reads most naturally
   when the sketch plane is aligned with the mirror axis (drawing on Front with
   X mirror, say). A symmetry origin you can move is a stage 2 item.

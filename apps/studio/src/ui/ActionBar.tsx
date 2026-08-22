@@ -1,6 +1,7 @@
 import { useStore } from '../state/store.js';
 import { FolderIcon, ImageIcon, RedoIcon, UndoIcon } from './Icons.js';
 import { SettingsPanel } from './SettingsPanel.js';
+import { ViewMenu } from './ViewMenu.js';
 
 export function ActionBar() {
   const canUndo = useStore((state) => state.canUndo);
@@ -37,6 +38,8 @@ export function ActionBar() {
       </button>
 
       <div className="mx-1 h-6 w-px bg-line" />
+
+      <ViewMenu />
 
       <button
         type="button"

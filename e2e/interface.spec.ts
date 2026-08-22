@@ -89,24 +89,36 @@ test.describe('theme', () => {
 test.describe('brushes', () => {
   test('a preset changes the stroke shape', async ({ page }) => {
     await ready(page);
-    expect((await styleOf(page)).flatness).toBeCloseTo(0.45, 3);
+    // Pen is the default: nearly round and near-constant width.
+    expect((await styleOf(page)).flatness).toBeCloseTo(0.75, 3);
 
     await page.getByRole('button', { name: 'Brush' }).click();
-    await page.getByRole('button', { name: /^Round/ }).click();
+    await page.getByRole('button', { name: 'Flat brush' }).click();
 
     const style = await styleOf(page);
-    expect(style.flatness).toBeCloseTo(1, 3);
-    expect(style.sides).toBe(12);
+    expect(style.flatness).toBeCloseTo(0.12, 3);
+    expect(style.sides).toBe(8);
+  });
+
+  test('a water marker is translucent', async ({ page }) => {
+    await ready(page);
+    expect((await styleOf(page)).opacity).toBeCloseTo(1, 3);
+
+    await page.getByRole('button', { name: 'Brush' }).click();
+    await page.getByRole('button', { name: 'Water marker round' }).click();
+
+    // Translucency is what makes a marker a marker, so it rides with the brush.
+    expect((await styleOf(page)).opacity).toBeLessThan(0.6);
   });
 
   test('the active brush name is shown', async ({ page }) => {
     await ready(page);
-    await expect(page.getByRole('button', { name: 'Brush' })).toHaveText('Ink');
+    await expect(page.getByRole('button', { name: 'Brush' })).toHaveText('Pen');
 
     await page.getByRole('button', { name: 'Brush' }).click();
-    await page.getByRole('button', { name: /^Liner/ }).click();
+    await page.getByRole('button', { name: 'Pencil' }).click();
 
-    await expect(page.getByRole('button', { name: 'Brush' })).toHaveText('Liner');
+    await expect(page.getByRole('button', { name: 'Brush' })).toHaveText('Pencil');
   });
 
   test('a brush does not change the colour', async ({ page }) => {
@@ -114,7 +126,7 @@ test.describe('brushes', () => {
 
     await page.getByRole('button', { name: 'Colour #c68cf0' }).click();
     await page.getByRole('button', { name: 'Brush' }).click();
-    await page.getByRole('button', { name: /^Chrome/ }).click();
+    await page.getByRole('button', { name: 'Water marker flat' }).click();
 
     expect((await styleOf(page)).color.toLowerCase()).toBe('#c68cf0');
   });
@@ -123,7 +135,7 @@ test.describe('brushes', () => {
     await ready(page);
 
     await page.getByRole('button', { name: 'Brush' }).click();
-    await page.getByRole('button', { name: /^Marker/ }).click();
+    await page.getByRole('button', { name: 'Round brush' }).click();
     await drawStroke(page);
 
     await expect
@@ -137,8 +149,8 @@ test.describe('brushes', () => {
       return node.style;
     });
 
-    expect(stored.minPressureScale).toBeCloseTo(0.85, 3);
-    expect(stored.taper).toBeCloseTo(0.02, 3);
+    expect(stored.minPressureScale).toBeCloseTo(0.28, 3);
+    expect(stored.taper).toBeCloseTo(0.18, 3);
   });
 });
 
@@ -251,6 +263,7 @@ test.describe('view controls', () => {
     await page.waitForTimeout(500);
 
     const before = await page.locator(CANVAS).screenshot();
+    await page.getByLabel('View').click();
     await page.getByRole('button', { name: 'Top', exact: true }).click();
     await page.waitForTimeout(1200);
     const after = await page.locator(CANVAS).screenshot();
@@ -265,6 +278,7 @@ test.describe('view controls', () => {
     await page.waitForTimeout(500);
 
     const before = await page.locator(CANVAS).screenshot();
+    await page.getByLabel('View').click();
     await page.getByLabel('Orbit right').click();
     await page.waitForTimeout(900);
     const after = await page.locator(CANVAS).screenshot();
@@ -278,6 +292,7 @@ test.describe('view controls', () => {
     await page.waitForTimeout(500);
 
     const before = await page.locator(CANVAS).screenshot();
+    await page.getByLabel('View').click();
     await page.getByLabel('Zoom in').click();
     await page.waitForTimeout(900);
     const after = await page.locator(CANVAS).screenshot();

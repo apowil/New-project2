@@ -48,9 +48,14 @@ npm run typecheck
 Press and hold with a finger — or middle-click — to re-centre the orbit on
 whatever is under it.
 
-Keys: `D` draw · `E` erase · `P` place sketch plane · `F` frame everything ·
-`[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo · `Ctrl+S` save ·
-`Ctrl+O` sketches.
+Keys: `D` draw · `S` select · `E` erase · `P` place sketch plane · `F` frame
+everything · `[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo ·
+`Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut, paste · `Ctrl+A` select the layer ·
+`Del` delete · `Esc` deselect · `Ctrl+S` save · `Ctrl+O` sketches.
+
+With the **select** tool, tap a stroke to pick it, drag a box to catch
+several, and drag something already selected to move it. The actions for a
+selection appear in a small bar just above it.
 
 **Sketch planes** are the thing to understand. Strokes land on a plane in
 space. By default that plane faces you, so drawing feels like paper — then you
@@ -65,7 +70,10 @@ it, so you can draw directly onto existing geometry.
 - Undo/redo, layers, eraser
 - Camera-facing / ground / front / side / surface sketch planes
 - Symmetry across X, Y and Z — any combination, up to eight copies at once
-- Six brush presets: Ink, Round, Ribbon, Marker, Liner, Chrome
+- Select, move, copy, cut and paste — including pasting into another layer
+- Boolean operations: merge, subtract, intersect, and a non-cutting combine
+- Layers: merge down, duplicate with contents, move a selection between them
+- Six brushes: round brush, flat brush, pen, pencil, and water markers
 - Full colour picker with recent colours, plus quick swatches
 - Light and dark themes, following the system by default
 - Reference images you can float over the canvas and trace straight through

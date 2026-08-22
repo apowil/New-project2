@@ -7,6 +7,7 @@ import {
   type SketchDocument,
   type StrokeStyle,
 } from '../document/types.js';
+import { type Vec3 } from '../math/vec3.js';
 import { type Command } from './history.js';
 
 export class AddNodeCommand implements Command {
@@ -391,5 +392,65 @@ export class DuplicateLayerCommand implements Command {
     doc.layers = doc.layers.filter((layer) => layer.id !== this.layer.id);
     if (this.previousActive) doc.activeLayerId = this.previousActive;
     touch(doc);
+  }
+}
+
+/**
+ * Shifts nodes in space.
+ *
+ * The buffers are replaced rather than mutated in place: the viewport decides
+ * whether to re-upload geometry by comparing array identity, so editing the
+ * existing array would move the data without anything noticing.
+ */
+export function translateNodes(doc: SketchDocument, ids: readonly NodeId[], delta: Vec3): void {
+  for (const id of ids) {
+    const node = doc.nodes.get(id);
+    if (!node) continue;
+
+    if (node.type === 'stroke') {
+      node.samples = node.samples.map((sample) => ({
+        position: {
+          x: sample.position.x + delta.x,
+          y: sample.position.y + delta.y,
+          z: sample.position.z + delta.z,
+        },
+        pressure: sample.pressure,
+      }));
+    } else if (node.type === 'baked') {
+      const positions = node.positions.slice();
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] = positions[i]! + delta.x;
+        positions[i + 1] = positions[i + 1]! + delta.y;
+        positions[i + 2] = positions[i + 2]! + delta.z;
+      }
+      node.positions = positions;
+    } else {
+      node.transform = {
+        ...node.transform,
+        position: {
+          x: node.transform.position.x + delta.x,
+          y: node.transform.position.y + delta.y,
+          z: node.transform.position.z + delta.z,
+        },
+      };
+    }
+  }
+  touch(doc);
+}
+
+export class TranslateNodesCommand implements Command {
+  readonly label = 'Move';
+
+  constructor(
+    private readonly ids: NodeId[],
+    private readonly delta: Vec3,
+  ) {}
+
+  apply(doc: SketchDocument): void {
+    translateNodes(doc, this.ids, this.delta);
+  }
+
+  revert(doc: SketchDocument): void {
+    translateNodes(doc, this.ids, { x: -this.delta.x, y: -this.delta.y, z: -this.delta.z });
   }
 }

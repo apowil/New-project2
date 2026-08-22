@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import { autoSaver, session, setThumbnailProvider, useStore } from './state/store.js';
+import { autoSaver, session, setThumbnailProvider, setViewActions, useStore } from './state/store.js';
 import { InputRouter } from './viewport/gestures.js';
 import { resolvePlane } from './viewport/sketchPlane.js';
 import { Viewport } from './viewport/viewport.js';
@@ -11,11 +11,11 @@ import { LayersPanel } from './ui/LayersPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
-import { Marquee, SelectionPanel } from './ui/SelectionPanel.js';
+import { HintBar } from './ui/HintBar.js';
+import { Marquee, SelectionContextBar } from './ui/SelectionContextBar.js';
 import { StatusToast } from './ui/StatusToast.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
-import { ViewPanel, type ViewPreset } from './ui/ViewPanel.js';
 import { watchSystemTheme } from './state/theme.js';
 
 export function App() {
@@ -42,8 +42,26 @@ export function App() {
       touchIntent: useStore.getState().touchIntent,
     });
 
+    let lastAnchor: { x: number; y: number } | null = null;
+
     viewport.onBeforeRender = () => {
       controller.tick();
+
+      // The toolbar tracks the selection, so its anchor is recomputed each
+      // frame — but only pushed into React when it actually moved, or every
+      // frame would re-render the tree.
+      const selected = useStore.getState().selection;
+      const anchor = selected.length > 0 ? viewport.screenCentreOf(selected) : null;
+      const moved =
+        (anchor === null) !== (lastAnchor === null) ||
+        (anchor !== null &&
+          lastAnchor !== null &&
+          (Math.abs(anchor.x - lastAnchor.x) > 1 || Math.abs(anchor.y - lastAnchor.y) > 1));
+
+      if (moved) {
+        lastAnchor = anchor;
+        useStore.getState().setSelectionAnchor(anchor);
+      }
 
       // The camera-facing plane depends on the camera, so it is resolved per
       // frame rather than cached in the store.
@@ -55,6 +73,26 @@ export function App() {
     };
 
     setThumbnailProvider(() => viewport.thumbnail());
+    setViewActions({
+      preset: (theta, phi) => {
+        viewport.camera.orbitTo(theta, phi);
+        viewport.requestRender();
+      },
+      nudge: (deltaTheta, deltaPhi) => {
+        viewport.camera.orbit(deltaTheta, deltaPhi);
+        viewport.requestRender();
+      },
+      zoom: (factor) => {
+        viewport.camera.dolly(factor);
+        viewport.requestRender();
+      },
+      frameAll: () => {
+        const bounds = viewport.contentBounds();
+        if (bounds.isEmpty()) return;
+        viewport.camera.frame(bounds);
+        viewport.requestRender();
+      },
+    });
     const detachAutoSave = autoSaver.attach();
 
     viewport.syncDocument(session.document, true);
@@ -69,6 +107,7 @@ export function App() {
     return () => {
       detachAutoSave();
       setThumbnailProvider(null);
+      setViewActions(null);
       router.dispose();
       viewport.dispose();
       viewportRef.current = null;
@@ -131,27 +170,6 @@ export function App() {
     const bounds = viewport.contentBounds();
     if (bounds.isEmpty()) return;
     viewport.camera.frame(bounds);
-    viewport.requestRender();
-  }, []);
-
-  const applyPreset = useCallback((preset: ViewPreset) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    viewport.camera.orbitTo(preset.theta, preset.phi);
-    viewport.requestRender();
-  }, []);
-
-  const nudgeView = useCallback((deltaTheta: number, deltaPhi: number) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    viewport.camera.orbit(deltaTheta, deltaPhi);
-    viewport.requestRender();
-  }, []);
-
-  const zoomView = useCallback((factor: number) => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    viewport.camera.dolly(factor);
     viewport.requestRender();
   }, []);
 
@@ -275,27 +293,25 @@ export function App() {
           <div className="relative z-40">
             <ActionBar />
           </div>
-          <ViewPanel
-            onPreset={applyPreset}
-            onNudge={nudgeView}
-            onZoom={zoomView}
-            onFrameAll={frameAll}
-          />
           <LayersPanel />
         </div>
 
-        <div className="absolute bottom-4 left-4 flex flex-col gap-3">
-          <SelectionPanel />
-          <PlanePanel />
-        </div>
+        {/* Panels follow the tool: what is on screen is what the current tool
+            can actually do, rather than everything at once. */}
+        {(tool === 'draw' || tool === 'plane') && (
+          <div className="absolute bottom-4 left-4">
+            <PlanePanel />
+          </div>
+        )}
 
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-          <StyleBar />
-        </div>
+        {tool === 'draw' && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+            <StyleBar />
+          </div>
+        )}
 
-        <p className="absolute bottom-4 right-4 max-w-56 text-right text-[11px] leading-relaxed text-muted">
-          Pen draws · one finger orbits · two fingers pan &amp; zoom
-        </p>
+        <SelectionContextBar />
+        <HintBar />
 
         <Marquee />
         <ReferenceOverlay />

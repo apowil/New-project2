@@ -1,7 +1,15 @@
 import { useEffect } from 'react';
 
 import { session, useStore } from '../state/store.js';
-import { CloseIcon, DownloadIcon, PlusIcon, TrashIcon, UploadIcon } from './Icons.js';
+import {
+  CloseIcon,
+  CopyIcon,
+  DownloadIcon,
+  PlusIcon,
+  RenameIcon,
+  TrashIcon,
+  UploadIcon,
+} from './Icons.js';
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString(undefined, {
@@ -21,6 +29,8 @@ export function ProjectsPanel() {
   const newSketch = useStore((state) => state.newSketch);
   const exportSketch = useStore((state) => state.exportSketch);
   const importSketch = useStore((state) => state.importSketch);
+  const renameProject = useStore((state) => state.renameProject);
+  const duplicateProject = useStore((state) => state.duplicateProject);
   const persistent = useStore((state) => state.storageIsPersistent);
 
   useEffect(() => {
@@ -38,7 +48,7 @@ export function ProjectsPanel() {
 
   return (
     <div
-      className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-ink-950/75 p-6 backdrop-blur-sm"
+      className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-scrim/75 p-6 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Sketches"
@@ -47,13 +57,13 @@ export function ProjectsPanel() {
       }}
     >
       <div className="panel flex h-full max-h-[42rem] w-full max-w-4xl flex-col">
-        <header className="flex items-center gap-3 border-b border-ink-700/70 px-5 py-3">
-          <h2 className="flex-1 text-sm font-medium text-ink-50">Sketches</h2>
+        <header className="flex items-center gap-3 border-b border-line/70 px-5 py-3">
+          <h2 className="flex-1 text-sm font-medium text-primary">Sketches</h2>
 
           <button
             type="button"
             onClick={() => void importSketch()}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-ink-200 transition-colors hover:bg-ink-700/70"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-secondary transition-colors hover:bg-line/70"
             title="Open a .wisp file from this device"
           >
             <UploadIcon />
@@ -63,7 +73,7 @@ export function ProjectsPanel() {
           <button
             type="button"
             onClick={exportSketch}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-ink-200 transition-colors hover:bg-ink-700/70"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-secondary transition-colors hover:bg-line/70"
             title="Save the current sketch as a .wisp file"
           >
             <DownloadIcon />
@@ -74,7 +84,10 @@ export function ProjectsPanel() {
             type="button"
             onClick={() => void newSketch()}
             className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs"
-            style={{ background: 'rgba(125,211,192,0.15)', color: 'var(--color-accent)' }}
+            style={{
+              background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)',
+              color: 'var(--color-accent)',
+            }}
           >
             <PlusIcon />
             New sketch
@@ -91,7 +104,7 @@ export function ProjectsPanel() {
         </header>
 
         {!persistent && (
-          <p className="border-b border-ink-700/70 px-5 py-2 text-xs" style={{ color: '#f7768e' }}>
+          <p className="border-b border-line/70 px-5 py-2 text-xs" style={{ color: 'var(--color-danger)' }}>
             This browser is not letting Wisp store anything, so sketches will
             not survive a reload. Export to a file to keep your work.
           </p>
@@ -99,7 +112,7 @@ export function ProjectsPanel() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {projects.length === 0 ? (
-            <p className="pt-12 text-center text-sm text-ink-400">
+            <p className="pt-12 text-center text-sm text-muted">
               Nothing saved yet. Draw something and it will appear here.
             </p>
           ) : (
@@ -113,7 +126,7 @@ export function ProjectsPanel() {
                       style={{
                         borderColor: isCurrent
                           ? 'var(--color-accent)'
-                          : 'rgba(255,255,255,0.09)',
+                          : 'var(--color-line)',
                       }}
                     >
                       <button
@@ -122,7 +135,7 @@ export function ProjectsPanel() {
                         className="block w-full text-left"
                         title={isCurrent ? 'Currently open' : `Open ${project.name}`}
                       >
-                        <div className="aspect-4/3 w-full bg-ink-900">
+                        <div className="aspect-4/3 w-full bg-canvas">
                           {project.thumbnail ? (
                             <img
                               src={project.thumbnail}
@@ -130,15 +143,15 @@ export function ProjectsPanel() {
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <div className="flex h-full items-center justify-center text-xs text-ink-600">
+                            <div className="flex h-full items-center justify-center text-xs text-faint">
                               No preview
                             </div>
                           )}
                         </div>
 
                         <div className="flex flex-col gap-0.5 px-3 py-2">
-                          <span className="truncate text-sm text-ink-50">{project.name}</span>
-                          <span className="text-[11px] text-ink-400">
+                          <span className="truncate text-sm text-primary">{project.name}</span>
+                          <span className="text-[11px] text-muted">
                             {project.strokeCount} stroke
                             {project.strokeCount === 1 ? '' : 's'} ·{' '}
                             {formatDate(project.updatedAt)}
@@ -146,19 +159,44 @@ export function ProjectsPanel() {
                         </div>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (window.confirm(`Delete "${project.name}"? This cannot be undone.`)) {
-                            void deleteProject(project.id);
-                          }
-                        }}
-                        className="absolute right-2 top-2 rounded-lg bg-ink-950/70 p-1.5 text-ink-200 opacity-0 transition-opacity hover:text-[#f7768e] focus:opacity-100 group-hover:opacity-100"
-                        aria-label={`Delete ${project.name}`}
-                        title="Delete"
-                      >
-                        <TrashIcon />
-                      </button>
+                      <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = window.prompt('Rename sketch', project.name);
+                            if (next !== null) void renameProject(project.id, next);
+                          }}
+                          className="rounded-lg bg-surface/90 p-1.5 text-secondary transition-colors hover:text-primary"
+                          aria-label={`Rename ${project.name}`}
+                          title="Rename"
+                        >
+                          <RenameIcon />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void duplicateProject(project.id)}
+                          className="rounded-lg bg-surface/90 p-1.5 text-secondary transition-colors hover:text-primary"
+                          aria-label={`Duplicate ${project.name}`}
+                          title="Duplicate"
+                        >
+                          <CopyIcon />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Delete "${project.name}"? This cannot be undone.`)) {
+                              void deleteProject(project.id);
+                            }
+                          }}
+                          className="rounded-lg bg-surface/90 p-1.5 text-secondary transition-colors hover:text-danger"
+                          aria-label={`Delete ${project.name}`}
+                          title="Delete"
+                        >
+                          <TrashIcon />
+                        </button>
+                      </div>
                     </div>
                   </li>
                 );

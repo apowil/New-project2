@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import {
   AddLayerCommand,
   DEFAULT_STROKE_STYLE,
+  createId,
   History,
   InlineOpRunner,
   RenameDocumentCommand,
   SetLayerPropertyCommand,
   createDocument,
   createLayer,
+  serializeDocument,
   deserializeDocument,
   NO_MIRROR,
   type Command,
@@ -23,8 +25,41 @@ import { type TouchIntent } from '../viewport/gestures.js';
 import { AutoSaver, readLastOpened, rememberLastOpened, type SaveState } from '../storage/autosave.js';
 import { getProjectStore, type ProjectMeta } from '../storage/projectStore.js';
 import { downloadDocument, pickDocumentFile, readDocumentFile } from '../storage/files.js';
+import { pickImageFile, readImageAsDataUrl } from '../storage/images.js';
+import { DEFAULT_BRUSH_ID, findBrush } from '../tools/brushes.js';
+import {
+  SCENE_THEMES,
+  applyTheme,
+  readThemePreference,
+  resolveTheme,
+  writeThemePreference,
+  type ResolvedTheme,
+  type ThemePreference,
+} from './theme.js';
 
 export type ToolId = 'draw' | 'erase' | 'plane';
+
+/**
+ * A tracing image floating over the canvas.
+ *
+ * Deliberately a view aid rather than a document node: it is not saved into
+ * the sketch, does not print, and can be dragged over the drawing while
+ * strokes pass straight through it.
+ */
+export interface ReferenceImage {
+  src: string;
+  name: string;
+  /** Top-left position in CSS pixels. */
+  x: number;
+  y: number;
+  width: number;
+  opacity: number;
+  visible: boolean;
+  /** When true the image ignores the pointer, so you can draw through it. */
+  drawThrough: boolean;
+}
+
+const MAX_RECENT_COLORS = 12;
 
 /**
  * The document and its history live outside React.
@@ -86,6 +121,11 @@ interface AppState {
   projectsOpen: boolean;
   statusMessage: string | null;
 
+  themePreference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
+  recentColors: string[];
+  reference: ReferenceImage | null;
+
   setTool: (tool: ToolId) => void;
   setStyle: (patch: Partial<StrokeStyle>) => void;
   setPlaneMode: (mode: PlaneMode) => void;
@@ -95,6 +135,17 @@ interface AppState {
   setShowPlaneIndicator: (show: boolean) => void;
   setStatusMessage: (message: string | null) => void;
   toggleMirror: (axis: keyof MirrorAxes) => void;
+  applyBrush: (id: string) => void;
+
+  setThemePreference: (preference: ThemePreference) => void;
+  syncResolvedTheme: () => void;
+
+  importReference: () => Promise<void>;
+  updateReference: (patch: Partial<ReferenceImage>) => void;
+  clearReference: () => void;
+
+  renameProject: (id: string, name: string) => Promise<void>;
+  duplicateProject: (id: string) => Promise<void>;
 
   run: (command: Command) => void;
   undo: () => void;
@@ -120,7 +171,13 @@ interface AppState {
 
 export const useStore = create<AppState>((set, get) => ({
   tool: 'draw',
-  style: { ...DEFAULT_STROKE_STYLE },
+  // Start on a real preset, so the brush control does not open on "Custom",
+  // and on a stroke colour that is visible against the resolved theme.
+  style: {
+    ...DEFAULT_STROKE_STYLE,
+    ...findBrush(DEFAULT_BRUSH_ID).shape,
+    color: SCENE_THEMES[resolveTheme(readThemePreference())].defaultStroke,
+  },
   plane: { ...DEFAULT_PLANE_STATE },
   touchIntent: 'camera',
   showPlaneIndicator: true,
@@ -143,8 +200,28 @@ export const useStore = create<AppState>((set, get) => ({
   projectsOpen: false,
   statusMessage: null,
 
+  themePreference: readThemePreference(),
+  resolvedTheme: resolveTheme(readThemePreference()),
+  recentColors: [],
+  reference: null,
+
   setTool: (tool) => set({ tool }),
-  setStyle: (patch) => set((state) => ({ style: { ...state.style, ...patch } })),
+  setStyle: (patch) =>
+    set((state) => {
+      const style = { ...state.style, ...patch };
+      if (!patch.color || patch.color === state.style.color) return { style };
+
+      // Most recent first, no duplicates, bounded.
+      const color = patch.color.toLowerCase();
+      const recentColors = [
+        color,
+        ...state.recentColors.filter((existing) => existing !== color),
+      ].slice(0, MAX_RECENT_COLORS);
+      return { style, recentColors };
+    }),
+
+  applyBrush: (id) =>
+    set((state) => ({ style: { ...state.style, ...findBrush(id).shape } })),
 
   setPlaneMode: (mode) => set((state) => ({ plane: { ...state.plane, mode, offset: 0 } })),
   setPlaneOffset: (offset) => set((state) => ({ plane: { ...state.plane, offset } })),
@@ -159,6 +236,36 @@ export const useStore = create<AppState>((set, get) => ({
 
   toggleMirror: (axis) =>
     set((state) => ({ mirror: { ...state.mirror, [axis]: !state.mirror[axis] } })),
+
+  setThemePreference: (preference) => {
+    writeThemePreference(preference);
+    set({ themePreference: preference });
+    get().syncResolvedTheme();
+  },
+
+  /** Resolves "system" against the OS and applies the result everywhere. */
+  syncResolvedTheme: () => {
+    const state = get();
+    const resolved = resolveTheme(state.themePreference);
+    if (resolved === state.resolvedTheme) {
+      applyTheme(resolved);
+      return;
+    }
+
+    applyTheme(resolved);
+
+    // A pale default stroke is invisible on a light ground and vice versa, so
+    // the default follows the theme — but only while it is still the default.
+    // A colour the user actually picked is left alone.
+    const previousDefault = SCENE_THEMES[state.resolvedTheme].defaultStroke;
+    const nextDefault = SCENE_THEMES[resolved].defaultStroke;
+    const style =
+      state.style.color.toLowerCase() === previousDefault.toLowerCase()
+        ? { ...state.style, color: nextDefault }
+        : state.style;
+
+    set({ resolvedTheme: resolved, style });
+  },
 
   run: (command) => {
     session.history.run(command);
@@ -215,6 +322,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   /** Reopens the last sketch, if there is one. Runs once on startup. */
   boot: async () => {
+    set({ themePreference: readThemePreference() });
+    get().syncResolvedTheme();
+
     const store = await getProjectStore();
     set({ storageIsPersistent: store.kind !== 'memory' });
 
@@ -344,6 +454,86 @@ export const useStore = create<AppState>((set, get) => ({
       console.error('Import failed', error);
       set({ statusMessage: describeError(error, 'That file is not a Wisp sketch.') });
     }
+  },
+
+  importReference: async () => {
+    const file = await pickImageFile();
+    if (!file) return;
+
+    try {
+      const src = await readImageAsDataUrl(file);
+      set({
+        reference: {
+          src,
+          name: file.name,
+          x: 80,
+          y: 100,
+          width: 360,
+          opacity: 0.6,
+          visible: true,
+          drawThrough: true,
+        },
+        statusMessage: `Reference: ${file.name}`,
+      });
+    } catch (error) {
+      console.error('Could not read the image', error);
+      set({ statusMessage: describeError(error, 'That image could not be read.') });
+    }
+  },
+
+  updateReference: (patch) =>
+    set((state) => (state.reference ? { reference: { ...state.reference, ...patch } } : {})),
+
+  clearReference: () => set({ reference: null }),
+
+  renameProject: async (id, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    // Renaming the open sketch goes through history so it can be undone.
+    if (id === session.document.id) {
+      get().renameSketch(trimmed);
+      await get().saveNow();
+      return;
+    }
+
+    const store = await getProjectStore();
+    const data = await store.read(id);
+    const meta = (await store.list()).find((project) => project.id === id);
+    if (!data || !meta) return;
+
+    const doc = deserializeDocument(data);
+    doc.name = trimmed;
+    await store.write({ ...meta, name: trimmed, updatedAt: Date.now() }, serializeDocument(doc));
+    await get().refreshProjects();
+  },
+
+  duplicateProject: async (id) => {
+    const store = await getProjectStore();
+    const data = await store.read(id);
+    const meta = (await store.list()).find((project) => project.id === id);
+    if (!data || !meta) return;
+
+    const doc = deserializeDocument(data);
+    // A copy needs its own identity, or it would overwrite the original on
+    // the next autosave.
+    doc.id = createId('doc');
+    doc.name = `${doc.name} copy`;
+    const now = Date.now();
+
+    await store.write(
+      {
+        id: doc.id,
+        name: doc.name,
+        createdAt: now,
+        updatedAt: now,
+        strokeCount: doc.nodes.size,
+        thumbnail: meta.thumbnail,
+      },
+      serializeDocument(doc),
+    );
+    await get().refreshProjects();
+    set({ statusMessage: `Duplicated ${meta.name}` });
   },
 
   saveNow: async () => {

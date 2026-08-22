@@ -65,7 +65,13 @@ it, so you can draw directly onto existing geometry.
 - Undo/redo, layers, eraser
 - Camera-facing / ground / front / side / surface sketch planes
 - Symmetry across X, Y and Z — any combination, up to eight copies at once
-- Autosave, a project library with thumbnails, and `.wisp` import/export
+- Six brush presets: Ink, Round, Ribbon, Marker, Liner, Chrome
+- Full colour picker with recent colours, plus quick swatches
+- Light and dark themes, following the system by default
+- Reference images you can float over the canvas and trace straight through
+- Preset views, an orbit pad and zoom controls, for moving without gestures
+- Autosave, a project library with thumbnails, rename, duplicate, and
+  `.wisp` import/export
 - Installable, offline-capable PWA
 - Renders on demand, so a still sketch costs no battery
 

@@ -19,7 +19,7 @@ import {
 
 import { type StrokeInput } from '../viewport/gestures.js';
 import { resolvePlane } from '../viewport/sketchPlane.js';
-import { type Viewport } from '../viewport/viewport.js';
+import { geometryOptions, type Viewport } from '../viewport/viewport.js';
 import { session, useStore } from '../state/store.js';
 
 /**
@@ -120,11 +120,10 @@ export class DrawTool {
     const style = this.style;
     const normal = this.plane?.normal;
     const options = {
-      width: style.width,
+      ...geometryOptions(style),
       // Fewer sides while drawing: the preview is rebuilt every frame and the
       // difference is invisible at stroke thickness.
       sides: Math.max(4, Math.floor(style.sides / 2)),
-      flatness: style.flatness,
     };
 
     const geometries: StrokeGeometry[] = [];

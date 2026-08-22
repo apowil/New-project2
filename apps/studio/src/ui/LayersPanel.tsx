@@ -12,11 +12,11 @@ export function LayersPanel() {
   return (
     <div className="panel pointer-events-auto flex w-56 flex-col gap-1 p-2">
       <div className="flex items-center justify-between px-1 pb-1">
-        <span className="text-[11px] uppercase tracking-wide text-ink-400">Layers</span>
+        <span className="text-[11px] uppercase tracking-wide text-muted">Layers</span>
         <button
           type="button"
           onClick={addLayer}
-          className="rounded-lg p-1 text-ink-400 transition-colors hover:bg-ink-700/60 hover:text-ink-50"
+          className="rounded-lg p-1 text-muted transition-colors hover:bg-line/60 hover:text-primary"
           title="Add layer"
           aria-label="Add layer"
         >
@@ -30,13 +30,17 @@ export function LayersPanel() {
           <div
             key={layer.id}
             className="flex items-center gap-1 rounded-lg px-1 py-1 transition-colors"
-            style={active ? { background: 'rgba(125,211,192,0.12)' } : undefined}
+            style={
+              active
+                ? { background: 'color-mix(in srgb, var(--color-accent) 13%, transparent)' }
+                : undefined
+            }
           >
             <button
               type="button"
               onClick={() => setActiveLayer(layer.id)}
               className="min-w-0 flex-1 truncate px-1 text-left text-sm"
-              style={{ color: active ? 'var(--color-accent)' : 'var(--color-ink-200)' }}
+              style={{ color: active ? 'var(--color-accent)' : 'var(--color-secondary)' }}
               title={`Draw on ${layer.name}`}
             >
               {layer.name}
@@ -45,7 +49,7 @@ export function LayersPanel() {
             <button
               type="button"
               onClick={() => toggleVisible(layer.id)}
-              className="rounded p-1 text-ink-400 transition-colors hover:bg-ink-700/60 hover:text-ink-50"
+              className="rounded p-1 text-muted transition-colors hover:bg-line/60 hover:text-primary"
               title={layer.visible ? 'Hide layer' : 'Show layer'}
               aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
             >
@@ -55,7 +59,7 @@ export function LayersPanel() {
             <button
               type="button"
               onClick={() => toggleLocked(layer.id)}
-              className="rounded p-1 text-ink-400 transition-colors hover:bg-ink-700/60 hover:text-ink-50"
+              className="rounded p-1 text-muted transition-colors hover:bg-line/60 hover:text-primary"
               title={layer.locked ? 'Unlock layer' : 'Lock layer'}
               aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'}
             >

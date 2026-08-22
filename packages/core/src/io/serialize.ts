@@ -264,6 +264,11 @@ function readStyle(raw: unknown): StrokeStyle {
     opacity: clamp01(Number(source.opacity ?? DEFAULT_STROKE_STYLE.opacity)),
     roughness: clamp01(Number(source.roughness ?? DEFAULT_STROKE_STYLE.roughness)),
     metalness: clamp01(Number(source.metalness ?? DEFAULT_STROKE_STYLE.metalness)),
+    taper: clamp01(Number(source.taper ?? DEFAULT_STROKE_STYLE.taper)),
+    pressureCurve: positive(source.pressureCurve, DEFAULT_STROKE_STYLE.pressureCurve),
+    minPressureScale: clamp01(
+      Number(source.minPressureScale ?? DEFAULT_STROKE_STYLE.minPressureScale),
+    ),
   };
 }
 

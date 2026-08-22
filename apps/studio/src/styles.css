@@ -1,16 +1,44 @@
 @import 'tailwindcss';
 
+/*
+ * Semantic tokens, not a colour scale.
+ *
+ * Naming these by role rather than by lightness ("surface", not "ink-850") is
+ * what makes a light theme possible: the light palette redefines the same
+ * roles instead of inverting a scale, so a panel is a panel in both themes and
+ * nothing ends up with dark text on a dark ground.
+ *
+ * The theme is applied by stamping data-theme on <html>. "System" is resolved
+ * in JS and stamped explicitly, so there is exactly one code path here.
+ */
 @theme {
-  --color-ink-950: #0c0d0f;
-  --color-ink-900: #111214;
-  --color-ink-850: #17181b;
-  --color-ink-800: #1d1f23;
-  --color-ink-700: #2a2d33;
-  --color-ink-600: #3a3e46;
-  --color-ink-400: #7b818d;
-  --color-ink-200: #c3c7ce;
-  --color-ink-50: #f2f3f5;
+  --color-canvas: #111214;
+  --color-surface: #17181b;
+  --color-sunken: #1d1f23;
+  --color-line: #2a2d33;
+  --color-line-strong: #3a3e46;
+  --color-faint: #4c525c;
+  --color-muted: #8b919c;
+  --color-secondary: #c3c7ce;
+  --color-primary: #f2f3f5;
+  --color-scrim: #0c0d0f;
   --color-accent: #7dd3c0;
+  --color-danger: #f7768e;
+}
+
+:root[data-theme='light'] {
+  --color-canvas: #eef0f3;
+  --color-surface: #ffffff;
+  --color-sunken: #f1f3f6;
+  --color-line: #dcdfe4;
+  --color-line-strong: #c3c8d0;
+  --color-faint: #a8aeb8;
+  --color-muted: #646b76;
+  --color-secondary: #3d434c;
+  --color-primary: #16181c;
+  --color-scrim: #6b717c;
+  --color-accent: #0d8f79;
+  --color-danger: #c8394f;
 }
 
 html,
@@ -19,8 +47,8 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: var(--color-ink-900);
-  color: var(--color-ink-50);
+  background: var(--color-canvas);
+  color: var(--color-primary);
   font-family:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* Stop Android from turning a stray drag into pull-to-refresh mid-stroke. */
@@ -42,33 +70,63 @@ body,
 /* Panels sit above the canvas but must never swallow a stroke that starts on
    the canvas and drags across them. */
 .panel {
-  @apply rounded-2xl border border-ink-700/70 bg-ink-850/85 shadow-2xl backdrop-blur-md;
+  @apply rounded-2xl border border-line bg-surface/90 shadow-2xl backdrop-blur-md;
 }
 
 .tool-button {
-  @apply flex h-11 w-11 items-center justify-center rounded-xl text-ink-200 transition-colors;
-  @apply hover:bg-ink-700/70 active:bg-ink-600;
+  @apply flex h-11 w-11 items-center justify-center rounded-xl text-secondary transition-colors;
+  @apply hover:bg-line/70 active:bg-line-strong;
   touch-action: manipulation;
 }
 
 .tool-button[data-active='true'] {
-  @apply bg-accent/15 text-accent;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
 }
 
 .tool-button:disabled {
   @apply pointer-events-none opacity-30;
 }
 
+/* Small pill used for view presets, brush presets and symmetry axes. */
+.chip {
+  @apply rounded-lg px-2 py-1.5 text-xs text-secondary transition-colors;
+  @apply hover:bg-line/60;
+  touch-action: manipulation;
+}
+
+.chip[data-active='true'] {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}
+
+.section-label {
+  @apply text-[11px] uppercase tracking-wide text-muted;
+}
+
 /* Range inputs get a consistent look across Chrome/Android WebView. */
 input[type='range'] {
-  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-700;
+  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-line;
   touch-action: none;
 }
 
 input[type='range']::-webkit-slider-thumb {
-  @apply h-4 w-4 appearance-none rounded-full bg-ink-50 shadow;
+  @apply h-4 w-4 appearance-none rounded-full bg-primary shadow;
 }
 
 input[type='range']::-moz-range-thumb {
-  @apply h-4 w-4 rounded-full border-0 bg-ink-50 shadow;
+  @apply h-4 w-4 rounded-full border-0 bg-primary shadow;
+}
+
+/* Focus is invisible on a dark canvas without this. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -19,8 +19,8 @@ export function PlanePanel() {
   return (
     <div className="panel pointer-events-auto flex w-56 flex-col gap-3 p-3">
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-wide text-ink-400">Sketch plane</span>
-        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-ink-400">
+        <span className="text-[11px] uppercase tracking-wide text-muted">Sketch plane</span>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted">
           <input
             type="checkbox"
             checked={showIndicator}
@@ -38,12 +38,8 @@ export function PlanePanel() {
             type="button"
             title={hint}
             onClick={() => setPlaneMode(id)}
-            className="rounded-lg px-2 py-1.5 text-xs transition-colors"
-            style={
-              plane.mode === id
-                ? { background: 'rgba(125,211,192,0.15)', color: 'var(--color-accent)' }
-                : { color: 'var(--color-ink-200)' }
-            }
+            className="chip"
+            data-active={plane.mode === id}
           >
             {label}
           </button>
@@ -51,9 +47,9 @@ export function PlanePanel() {
       </div>
 
       <label className="flex flex-col gap-1.5">
-        <span className="flex justify-between text-[11px] uppercase tracking-wide text-ink-400">
+        <span className="flex justify-between text-[11px] uppercase tracking-wide text-muted">
           <span>Depth</span>
-          <span className="tabular-nums text-ink-200">{plane.offset.toFixed(2)} m</span>
+          <span className="tabular-nums text-secondary">{plane.offset.toFixed(2)} m</span>
         </span>
         <input
           type="range"
@@ -68,7 +64,7 @@ export function PlanePanel() {
       <button
         type="button"
         onClick={() => setPlaneOffset(0)}
-        className="rounded-lg py-1.5 text-xs text-ink-400 transition-colors hover:bg-ink-700/60 hover:text-ink-200"
+        className="rounded-lg py-1.5 text-xs text-muted transition-colors hover:bg-line/60 hover:text-secondary"
       >
         Reset depth
       </button>
@@ -80,9 +76,9 @@ export function PlanePanel() {
 
 /** Axis colours follow the usual convention: X red, Y green, Z blue. */
 const MIRROR_AXES = [
-  { axis: 'x' as const, label: 'X', color: '#f7768e' },
-  { axis: 'y' as const, label: 'Y', color: '#9ece6a' },
-  { axis: 'z' as const, label: 'Z', color: '#7aa2f7' },
+  { axis: 'x' as const, label: 'X', color: '#e5556f' },
+  { axis: 'y' as const, label: 'Y', color: '#5aa832' },
+  { axis: 'z' as const, label: 'Z', color: '#3b7fe0' },
 ];
 
 function MirrorRow() {
@@ -91,11 +87,11 @@ function MirrorRow() {
   const active = MIRROR_AXES.filter(({ axis }) => mirror[axis]).length;
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-ink-700/70 pt-3">
-      <span className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-ink-400">
+    <div className="flex flex-col gap-1.5 border-t border-line/70 pt-3">
+      <span className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted">
         <span>Symmetry</span>
         {active > 0 && (
-          <span className="normal-case tracking-normal text-ink-200">
+          <span className="normal-case tracking-normal text-secondary">
             {2 ** active} copies
           </span>
         )}
@@ -109,11 +105,11 @@ function MirrorRow() {
             onClick={() => toggleMirror(axis)}
             aria-pressed={mirror[axis]}
             title={`Mirror across the ${label} axis`}
-            className="rounded-lg py-1.5 text-xs font-medium transition-colors"
+            className="chip w-full font-medium"
             style={
               mirror[axis]
-                ? { background: `${color}26`, color }
-                : { color: 'var(--color-ink-400)' }
+                ? { background: `color-mix(in srgb, ${color} 18%, transparent)`, color }
+                : undefined
             }
           >
             {label}

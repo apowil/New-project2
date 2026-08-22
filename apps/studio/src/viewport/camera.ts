@@ -128,6 +128,24 @@ export class OrbitCamera {
     this.camera.updateMatrixWorld();
   }
 
+  /**
+   * Swings to an absolute orientation, keeping the current distance and pivot.
+   * Animated, unlike {@link setView} — this is what the preset view buttons
+   * use, and a hard cut between angles is disorienting.
+   */
+  orbitTo(theta: number, phi: number): void {
+    // Wind the target angle to whichever turn is nearest, so going from 350°
+    // to 10° rotates 20° forward rather than 340° backward.
+    const turns = Math.round((this.thetaGoal - theta) / (Math.PI * 2));
+    this.thetaGoal = theta + turns * Math.PI * 2;
+    this.phiGoal = clamp(phi, PHI_LIMIT, Math.PI - PHI_LIMIT);
+  }
+
+  /** Current orientation, for the view panel to show what is selected. */
+  get orientation(): { theta: number; phi: number } {
+    return { theta: this.thetaGoal, phi: this.phiGoal };
+  }
+
   /** Jumps to a view without damping — used on load and on "frame all". */
   setView(theta: number, phi: number, radius: number, target?: THREE.Vector3): void {
     this.thetaGoal = this.theta = theta;

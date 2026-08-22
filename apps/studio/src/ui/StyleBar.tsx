@@ -1,23 +1,73 @@
-import { useStore } from '../state/store.js';
+import { useState } from 'react';
 
+import { useStore } from '../state/store.js';
+import { BRUSHES, matchBrush } from '../tools/brushes.js';
+import { ColorPicker } from './ColorPicker.js';
+import { Popover } from './Popover.js';
+
+/**
+ * Swatches are stroke colours, so these must stay literal hex values — they
+ * end up in THREE.Color and in the saved file, neither of which can resolve a
+ * CSS custom property.
+ */
 const SWATCHES = [
   '#d8d2c8',
-  '#f4f4f5',
+  '#31363f',
   '#7dd3c0',
   '#7aa2f7',
   '#c68cf0',
   '#f7768e',
   '#e0af68',
-  '#3d4149',
 ];
 
 export function StyleBar() {
   const style = useStore((state) => state.style);
   const setStyle = useStore((state) => state.setStyle);
+  const applyBrush = useStore((state) => state.applyBrush);
+  const recentColors = useStore((state) => state.recentColors);
+
+  const [openPanel, setOpenPanel] = useState<'color' | 'brush' | null>(null);
+  const activeBrush = matchBrush(style);
+  const brushName = activeBrush
+    ? (BRUSHES.find((brush) => brush.id === activeBrush)?.name ?? 'Custom')
+    : 'Custom';
+
+  const toggle = (panel: 'color' | 'brush') =>
+    setOpenPanel((current) => (current === panel ? null : panel));
 
   return (
-    <div className="panel pointer-events-auto flex items-center gap-4 px-4 py-3">
-      <div className="flex items-center gap-1.5">
+    <div className="panel pointer-events-auto flex items-center gap-3 px-3 py-2.5">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => toggle('color')}
+          aria-expanded={openPanel === 'color'}
+          aria-label="Colour"
+          title="Colour"
+          className="flex h-10 items-center gap-2 rounded-xl px-2 transition-colors hover:bg-line/60"
+        >
+          <span
+            className="h-6 w-6 rounded-full border border-line"
+            style={{ background: style.color }}
+          />
+          <span className="font-mono text-[11px] uppercase text-muted">{style.color}</span>
+        </button>
+
+        <Popover
+          open={openPanel === 'color'}
+          onClose={() => setOpenPanel(null)}
+          align="left"
+          label="Colour"
+        >
+          <ColorPicker
+            value={style.color}
+            onChange={(color) => setStyle({ color })}
+            recent={recentColors}
+          />
+        </Popover>
+      </div>
+
+      <div className="flex items-center gap-1">
         {SWATCHES.map((color) => (
           <button
             key={color}
@@ -25,36 +75,57 @@ export function StyleBar() {
             onClick={() => setStyle({ color })}
             aria-label={`Colour ${color}`}
             title={color}
-            className="h-7 w-7 rounded-full border transition-transform hover:scale-110"
+            className="h-6 w-6 rounded-full border transition-transform hover:scale-110"
             style={{
               backgroundColor: color,
               borderColor:
                 style.color.toLowerCase() === color.toLowerCase()
                   ? 'var(--color-accent)'
-                  : 'rgba(255,255,255,0.14)',
-              boxShadow:
-                style.color.toLowerCase() === color.toLowerCase()
-                  ? '0 0 0 2px rgba(125,211,192,0.35)'
-                  : undefined,
+                  : 'var(--color-line)',
             }}
           />
         ))}
-
-        <label
-          className="ml-1 h-7 w-7 cursor-pointer overflow-hidden rounded-full border border-white/15"
-          title="Custom colour"
-        >
-          <input
-            type="color"
-            value={style.color}
-            onChange={(event) => setStyle({ color: event.target.value })}
-            className="h-10 w-10 -translate-x-1 -translate-y-1 cursor-pointer border-0 bg-transparent p-0"
-            aria-label="Custom colour"
-          />
-        </label>
       </div>
 
-      <div className="h-8 w-px bg-ink-700" />
+      <div className="h-8 w-px bg-line" />
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => toggle('brush')}
+          aria-expanded={openPanel === 'brush'}
+          aria-label="Brush"
+          title="Brush"
+          className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm text-secondary transition-colors hover:bg-line/60"
+        >
+          {brushName}
+        </button>
+
+        <Popover
+          open={openPanel === 'brush'}
+          onClose={() => setOpenPanel(null)}
+          align="center"
+          label="Brush"
+        >
+          <div className="flex w-56 flex-col gap-1">
+            {BRUSHES.map((brush) => (
+              <button
+                key={brush.id}
+                type="button"
+                onClick={() => {
+                  applyBrush(brush.id);
+                  setOpenPanel(null);
+                }}
+                data-active={activeBrush === brush.id}
+                className="chip flex flex-col items-start gap-0.5 px-2.5 py-2 text-left"
+              >
+                <span className="text-sm">{brush.name}</span>
+                <span className="text-[11px] leading-snug text-muted">{brush.description}</span>
+              </button>
+            ))}
+          </div>
+        </Popover>
+      </div>
 
       <Slider
         label="Size"
@@ -64,16 +135,6 @@ export function StyleBar() {
         step={0.002}
         format={(v) => `${(v * 100).toFixed(1)} cm`}
         onChange={(width) => setStyle({ width })}
-      />
-
-      <Slider
-        label="Flat"
-        value={style.flatness}
-        min={0.08}
-        max={1}
-        step={0.02}
-        format={(v) => (v > 0.9 ? 'round' : v < 0.2 ? 'ribbon' : v.toFixed(2))}
-        onChange={(flatness) => setStyle({ flatness })}
       />
     </div>
   );
@@ -92,9 +153,9 @@ interface SliderProps {
 function Slider({ label, value, min, max, step, format, onChange }: SliderProps) {
   return (
     <label className="flex w-32 flex-col gap-1.5">
-      <span className="flex justify-between text-[11px] uppercase tracking-wide text-ink-400">
+      <span className="section-label flex justify-between">
         <span>{label}</span>
-        <span className="tabular-nums text-ink-200">{format(value)}</span>
+        <span className="tabular-nums text-secondary">{format(value)}</span>
       </span>
       <input
         type="range"

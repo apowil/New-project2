@@ -70,14 +70,14 @@ export function DocumentBar() {
               setEditing(false);
             }
           }}
-          className="w-48 rounded bg-ink-800 px-1 text-sm text-ink-50 outline-none ring-1 ring-[var(--color-accent)]"
+          className="w-48 rounded bg-sunken px-1 text-sm text-primary outline-none ring-1 ring-[var(--color-accent)]"
           aria-label="Sketch name"
         />
       ) : (
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="max-w-48 truncate text-left text-sm text-ink-50 hover:text-[var(--color-accent)]"
+          className="max-w-48 truncate text-left text-sm text-primary hover:text-[var(--color-accent)]"
           title="Rename this sketch"
         >
           {name}
@@ -85,9 +85,9 @@ export function DocumentBar() {
       )}
 
       <span
-        className="text-[11px] text-ink-400"
+        className="text-[11px] text-muted"
         style={
-          saveState === 'error' || !persistent ? { color: '#f7768e' } : undefined
+          saveState === 'error' || !persistent ? { color: 'var(--color-danger)' } : undefined
         }
       >
         {status}

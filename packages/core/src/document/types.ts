@@ -15,6 +15,12 @@ export interface StrokeStyle {
   opacity: number;
   roughness: number;
   metalness: number;
+  /** Fraction of the stroke length tapered at each end. */
+  taper: number;
+  /** Exponent on pressure. Above 1 makes light strokes noticeably thinner. */
+  pressureCurve: number;
+  /** Width at zero pressure, as a fraction of `width`. */
+  minPressureScale: number;
 }
 
 export const DEFAULT_STROKE_STYLE: StrokeStyle = {
@@ -25,6 +31,9 @@ export const DEFAULT_STROKE_STYLE: StrokeStyle = {
   opacity: 1,
   roughness: 0.65,
   metalness: 0,
+  taper: 0.12,
+  pressureCurve: 1.4,
+  minPressureScale: 0.35,
 };
 
 export interface StrokeNode {

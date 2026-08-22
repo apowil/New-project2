@@ -55,6 +55,26 @@ Added after reviewing what Feather actually ships:
   pivots around where it started, which makes inspecting a detail off to one
   side a fight.
 
+## Stage 1.6 — Interface and workflow ✅
+
+- **Light and dark themes.** Semantic colour tokens rather than an inverted
+  scale, so a panel reads as a panel in both. The 3D scene repaints too —
+  background, fog and grid — and the default stroke colour follows the theme
+  so a fresh sketch is never invisible, while a colour you picked yourself is
+  left alone.
+- **Brush presets** — Ink, Round, Ribbon, Marker, Liner, Chrome. A brush is a
+  set of *shape* parameters (cross-section, taper, pressure response);
+  switching brush deliberately does not change your colour or size.
+- **Colour picker** — hue strip and saturation/value square built from CSS
+  gradients, hex entry, and a recent-colours list.
+- **Reference images** — float an image over the canvas, drag, resize, set its
+  opacity. "Trace" mode makes it ignore the pointer so strokes pass straight
+  through it.
+- **View controls** — named preset views, an orbit pad, and zoom buttons, so
+  the camera can be moved without a spare hand for gestures.
+- **Project management** — rename and duplicate from the library, alongside
+  open, delete, import and export.
+
 ---
 
 ## Still to build
@@ -123,10 +143,14 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
 
 ### Stage 7 — Look and polish
 
+- **Orthographic projection toggle.** Preset views exist, but they are still
+  perspective. A true front elevation needs orthographic, which means teaching
+  the camera a second projection — including `ray()`, which drawing depends
+  on, so it wants doing carefully rather than in a batch.
 - **Lighting controls and background colour** — Feather ships both, and they
   matter more than expected: a sketch reads completely differently under
   different light, and it is how presentation renders get made
-- **Brush styles and patterns** beyond a plain swept tube
+- **Brush textures and patterns** beyond the swept-tube shapes now available
 - Onboarding for the gesture model
 - Stroke stabiliser strength control
 - Performance: instanced stroke rendering, LOD for dense sketches

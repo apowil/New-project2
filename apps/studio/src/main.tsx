@@ -3,7 +3,11 @@ import { createRoot } from 'react-dom/client';
 
 import { App } from './App.js';
 import { session, useStore } from './state/store.js';
+import { initTheme } from './state/theme.js';
 import './styles.css';
+
+// Before the first paint, so there is no flash of the wrong theme.
+initTheme();
 
 /**
  * Debug handle. End-to-end tests drive the app through real pointer events and

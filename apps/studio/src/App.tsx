@@ -10,9 +10,12 @@ import { DocumentBar } from './ui/DocumentBar.js';
 import { LayersPanel } from './ui/LayersPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
+import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
 import { StatusToast } from './ui/StatusToast.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
+import { ViewPanel, type ViewPreset } from './ui/ViewPanel.js';
+import { watchSystemTheme } from './state/theme.js';
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,6 +28,7 @@ export function App() {
   const tool = useStore((state) => state.tool);
   const showPlaneIndicator = useStore((state) => state.showPlaneIndicator);
   const touchIntent = useStore((state) => state.touchIntent);
+  const resolvedTheme = useStore((state) => state.resolvedTheme);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -70,6 +74,19 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    viewportRef.current?.setTheme(resolvedTheme);
+  }, [resolvedTheme]);
+
+  useEffect(() =>
+    watchSystemTheme(() => {
+      // Only meaningful while the preference is "system"; the store re-checks.
+      if (useStore.getState().themePreference === 'system') {
+        useStore.getState().syncResolvedTheme();
+      }
+    }),
+  []);
+
   // Push document changes into the scene.
   useEffect(() => {
     viewportRef.current?.syncDocument(session.document);
@@ -102,6 +119,27 @@ export function App() {
     const bounds = viewport.contentBounds();
     if (bounds.isEmpty()) return;
     viewport.camera.frame(bounds);
+    viewport.requestRender();
+  }, []);
+
+  const applyPreset = useCallback((preset: ViewPreset) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.camera.orbitTo(preset.theta, preset.phi);
+    viewport.requestRender();
+  }, []);
+
+  const nudgeView = useCallback((deltaTheta: number, deltaPhi: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.camera.orbit(deltaTheta, deltaPhi);
+    viewport.requestRender();
+  }, []);
+
+  const zoomView = useCallback((factor: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.camera.dolly(factor);
     viewport.requestRender();
   }, []);
 
@@ -182,7 +220,18 @@ export function App() {
         </header>
 
         <div className="absolute right-4 top-4 flex flex-col items-end gap-3">
-          <ActionBar onFrameAll={frameAll} />
+          {/* The settings dropdown hangs below this bar and overlaps the
+              panels underneath, which are later siblings. Without a raised
+              stacking context they paint over it and eat its clicks. */}
+          <div className="relative z-40">
+            <ActionBar />
+          </div>
+          <ViewPanel
+            onPreset={applyPreset}
+            onNudge={nudgeView}
+            onZoom={zoomView}
+            onFrameAll={frameAll}
+          />
           <LayersPanel />
         </div>
 
@@ -194,10 +243,11 @@ export function App() {
           <StyleBar />
         </div>
 
-        <p className="absolute bottom-4 right-4 max-w-56 text-right text-[11px] leading-relaxed text-ink-400">
+        <p className="absolute bottom-4 right-4 max-w-56 text-right text-[11px] leading-relaxed text-muted">
           Pen draws · one finger orbits · two fingers pan &amp; zoom
         </p>
 
+        <ReferenceOverlay />
         <StatusToast />
         <ProjectsPanel />
       </div>

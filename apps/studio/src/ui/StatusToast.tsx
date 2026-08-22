@@ -17,7 +17,7 @@ export function StatusToast() {
 
   return (
     <div
-      className="panel pointer-events-auto absolute left-1/2 top-4 z-30 -translate-x-1/2 px-4 py-2 text-sm text-ink-50"
+      className="panel pointer-events-auto absolute left-1/2 top-4 z-30 -translate-x-1/2 px-4 py-2 text-sm text-primary"
       role="status"
       aria-live="polite"
     >

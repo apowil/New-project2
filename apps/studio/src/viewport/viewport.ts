@@ -10,9 +10,20 @@ import {
   type Vec3,
 } from '@wisp/core';
 
+import { SCENE_THEMES, type ResolvedTheme, type SceneTheme } from '../state/theme.js';
 import { OrbitCamera } from './camera.js';
 import { PlaneIndicator } from './sketchPlane.js';
 import { applyStyle, makeStrokeMaterial, toBufferGeometry } from './strokeMesh.js';
+
+/** The parts of a style that change the swept surface rather than its shading. */
+export const geometryOptions = (style: StrokeStyle) => ({
+  width: style.width,
+  sides: style.sides,
+  flatness: style.flatness,
+  taper: style.taper,
+  pressureCurve: style.pressureCurve,
+  minPressureScale: style.minPressureScale,
+});
 
 interface StrokeEntry {
   mesh: THREE.Mesh;
@@ -50,6 +61,8 @@ export class Viewport {
 
   private readonly previewMeshes: THREE.Mesh[] = [];
   private previewMaterial: THREE.MeshStandardMaterial | null = null;
+  private grid: THREE.GridHelper | null = null;
+  private theme: ResolvedTheme = 'dark';
 
   private frameHandle = 0;
   private dirty = true;
@@ -72,8 +85,8 @@ export class Viewport {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
-    this.scene.background = new THREE.Color(0x111214);
-    this.scene.fog = new THREE.Fog(0x111214, 24, 110);
+    this.scene.background = new THREE.Color(SCENE_THEMES.dark.background);
+    this.scene.fog = new THREE.Fog(SCENE_THEMES.dark.fog, 24, 110);
 
     this.setupEnvironment();
     this.setupGround();
@@ -99,7 +112,7 @@ export class Viewport {
     const pmrem = new THREE.PMREMGenerator(this.renderer);
     const environment = pmrem.fromScene(new RoomEnvironment(), 0.04);
     this.scene.environment = environment.texture;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environmentIntensity = SCENE_THEMES[this.theme].environmentIntensity;
     pmrem.dispose();
 
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
@@ -114,13 +127,40 @@ export class Viewport {
   }
 
   private setupGround(): void {
-    const grid = new THREE.GridHelper(40, 40, 0x3a3e46, 0x24272c);
+    this.rebuildGrid(SCENE_THEMES[this.theme]);
+  }
+
+  private rebuildGrid(palette: SceneTheme): void {
+    if (this.grid) {
+      this.scene.remove(this.grid);
+      this.grid.geometry.dispose();
+      (this.grid.material as THREE.Material).dispose();
+    }
+
+    // GridHelper bakes its colours into vertex data, so a theme change means
+    // building a new one rather than tweaking a material.
+    const grid = new THREE.GridHelper(40, 40, palette.gridMajor, palette.gridMinor);
     const material = grid.material as THREE.Material;
     material.transparent = true;
-    material.opacity = 0.45;
+    material.opacity = palette.gridOpacity;
     material.depthWrite = false;
     grid.position.y = 0;
+
+    this.grid = grid;
     this.scene.add(grid);
+  }
+
+  /** Repaints the scene for a light or dark surround. */
+  setTheme(theme: ResolvedTheme): void {
+    if (theme === this.theme) return;
+    this.theme = theme;
+
+    const palette = SCENE_THEMES[theme];
+    (this.scene.background as THREE.Color).set(palette.background);
+    (this.scene.fog as THREE.Fog).color.set(palette.fog);
+    this.scene.environmentIntensity = palette.environmentIntensity;
+    this.rebuildGrid(palette);
+    this.requestRender();
   }
 
   private observeResize(): void {
@@ -198,9 +238,7 @@ export class Viewport {
 
     if (!existing) {
       const geometry = buildStrokeGeometry(node.samples, {
-        width: node.style.width,
-        sides: node.style.sides,
-        flatness: node.style.flatness,
+        ...geometryOptions(node.style),
         initialNormal: node.planeNormal,
       });
       if (!geometry) return;
@@ -226,9 +264,7 @@ export class Viewport {
     // Geometry depends on the samples and on the width-ish parts of the style.
     if (existing.samplesRef !== node.samples || existing.styleRef !== node.style) {
       const geometry = buildStrokeGeometry(node.samples, {
-        width: node.style.width,
-        sides: node.style.sides,
-        flatness: node.style.flatness,
+        ...geometryOptions(node.style),
         initialNormal: node.planeNormal,
       });
       if (geometry) {

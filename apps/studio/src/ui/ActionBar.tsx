@@ -1,17 +1,16 @@
 import { useStore } from '../state/store.js';
-import { FolderIcon, FrameIcon, RedoIcon, UndoIcon } from './Icons.js';
+import { FolderIcon, ImageIcon, RedoIcon, UndoIcon } from './Icons.js';
+import { SettingsPanel } from './SettingsPanel.js';
 
-interface ActionBarProps {
-  onFrameAll: () => void;
-}
-
-export function ActionBar({ onFrameAll }: ActionBarProps) {
+export function ActionBar() {
   const canUndo = useStore((state) => state.canUndo);
   const canRedo = useStore((state) => state.canRedo);
   const undoLabel = useStore((state) => state.undoLabel);
   const undo = useStore((state) => state.undo);
   const redo = useStore((state) => state.redo);
   const setProjectsOpen = useStore((state) => state.setProjectsOpen);
+  const importReference = useStore((state) => state.importReference);
+  const hasReference = useStore((state) => state.reference !== null);
 
   return (
     <div className="panel pointer-events-auto flex items-center gap-1 p-1.5">
@@ -37,16 +36,17 @@ export function ActionBar({ onFrameAll }: ActionBarProps) {
         <RedoIcon />
       </button>
 
-      <div className="mx-1 h-6 w-px bg-ink-700" />
+      <div className="mx-1 h-6 w-px bg-line" />
 
       <button
         type="button"
         className="tool-button"
-        onClick={onFrameAll}
-        title="Frame everything (F)"
-        aria-label="Frame everything"
+        onClick={() => void importReference()}
+        data-active={hasReference}
+        title="Reference image"
+        aria-label="Reference image"
       >
-        <FrameIcon />
+        <ImageIcon />
       </button>
 
       <button
@@ -58,6 +58,8 @@ export function ActionBar({ onFrameAll }: ActionBarProps) {
       >
         <FolderIcon />
       </button>
+
+      <SettingsPanel />
     </div>
   );
 }

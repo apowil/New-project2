@@ -1,0 +1,30 @@
+{
+  "name": "wisp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Wisp — a 3D sketching studio for Android tablets, with optional PC compute offload",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @wisp/studio",
+    "build": "npm run build --workspace @wisp/core && npm run build --workspace @wisp/studio",
+    "preview": "npm run preview --workspace @wisp/studio",
+    "typecheck": "npm run typecheck --workspace @wisp/core && npm run typecheck --workspace @wisp/studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

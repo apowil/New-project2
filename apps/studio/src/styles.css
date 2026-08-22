@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-950: #0c0d0f;
+  --color-ink-900: #111214;
+  --color-ink-850: #17181b;
+  --color-ink-800: #1d1f23;
+  --color-ink-700: #2a2d33;
+  --color-ink-600: #3a3e46;
+  --color-ink-400: #7b818d;
+  --color-ink-200: #c3c7ce;
+  --color-ink-50: #f2f3f5;
+  --color-accent: #7dd3c0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--color-ink-900);
+  color: var(--color-ink-50);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Stop Android from turning a stray drag into pull-to-refresh mid-stroke. */
+  overscroll-behavior: none;
+}
+
+#viewport-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The pointer handlers own every gesture; the browser must not pan or zoom. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: crosshair;
+}
+
+/* Panels sit above the canvas but must never swallow a stroke that starts on
+   the canvas and drags across them. */
+.panel {
+  @apply rounded-2xl border border-ink-700/70 bg-ink-850/85 shadow-2xl backdrop-blur-md;
+}
+
+.tool-button {
+  @apply flex h-11 w-11 items-center justify-center rounded-xl text-ink-200 transition-colors;
+  @apply hover:bg-ink-700/70 active:bg-ink-600;
+  touch-action: manipulation;
+}
+
+.tool-button[data-active='true'] {
+  @apply bg-accent/15 text-accent;
+}
+
+.tool-button:disabled {
+  @apply pointer-events-none opacity-30;
+}
+
+/* Range inputs get a consistent look across Chrome/Android WebView. */
+input[type='range'] {
+  @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-ink-700;
+  touch-action: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  @apply h-4 w-4 appearance-none rounded-full bg-ink-50 shadow;
+}
+
+input[type='range']::-moz-range-thumb {
+  @apply h-4 w-4 rounded-full border-0 bg-ink-50 shadow;
+}

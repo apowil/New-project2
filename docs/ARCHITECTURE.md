@@ -1,0 +1,144 @@
+# Architecture
+
+## The decision everything else follows from
+
+Wisp has to ship as an Android app, as a Windows app, and — the unusual
+requirement — as something the tablet can load *from* the Windows machine so
+the PC does the heavy lifting.
+
+That last one rules out a native Android renderer. If the tablet is going to
+run the app served from a PC, the app has to be web technology. So there is
+one core, written once in TypeScript, delivered three ways:
+
+```
+                    ┌──────────────────────┐
+                    │   @wisp/core (TS)    │  no runtime dependencies
+                    │  document · history  │  runs anywhere JS runs
+                    │  geometry · ops      │
+                    └──────────┬───────────┘
+                               │
+                    ┌──────────┴───────────┐
+                    │   @wisp/studio       │  React UI + Three.js viewport
+                    └──────────┬───────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+   PWA / Android          Windows desktop        Tablet ⇄ PC
+   WebView shell          (Tauri, stage 5)       compute link
+```
+
+## Why the core has zero dependencies
+
+`packages/core` imports nothing. Not Three.js, not a maths library. Every
+vector helper is hand-written in `src/math/`.
+
+That is deliberate. The same module has to run in three places: the browser's
+main thread, a Web Worker on the tablet, and a Node process on the PC that
+never touches a DOM. A dependency-free core makes "ship this function to the
+PC and run it there" a serialisation problem rather than a porting problem.
+
+Three.js lives entirely in the studio app, where it belongs, and only ever
+consumes plain `Float32Array`s the core produced.
+
+## Rendering is on demand
+
+A sketching app is a still image most of the time. The render loop only draws
+a frame when something changed — a stroke grew, the camera is still settling,
+a panel changed a value. `Viewport.requestRender()` sets a dirty flag; the
+camera's damping reports whether it is still in motion.
+
+On a tablet this is the difference between an app you can draw with for an
+afternoon and one that empties the battery in ninety minutes.
+
+## React is not in the drawing path
+
+The document is a mutable graph that changes on every pointer move. Pushing
+that through React's reconciler would put UI work on the critical path between
+the pen moving and ink appearing.
+
+So the document and its history live in a plain object (`session` in
+`state/store.ts`), the viewport reads it directly, and React is used only for
+the panels — which re-render off a small mirrored slice of state and a
+`revision` counter.
+
+## Two things that decide how a stroke looks
+
+**Parallel-transport frames.** Sweeping a cross-section along a curve needs a
+reference frame at each step. Three's `TubeGeometry` uses Frenet frames, which
+spin violently wherever curvature flips — visible as a twist in the middle of
+a smooth stroke. `stroke/geometry.ts` instead rotates each frame by the minimum
+amount that keeps it perpendicular to the new tangent, so the cross-section
+never rolls about its own axis. There is a regression test for exactly this.
+
+**Coalesced pointer events.** A 240 Hz digitiser delivers roughly four samples
+per 60 Hz frame, but a naive `pointermove` handler sees one. Reading
+`event.getCoalescedEvents()` recovers the rest. Dropping them is the single
+biggest cause of strokes that look faceted rather than smooth.
+
+## The gesture model
+
+Input *type* decides intent, so nothing has to be modal:
+
+| Input         | Action              |
+| ------------- | ------------------- |
+| Pen           | Draw                |
+| One finger    | Orbit               |
+| Two fingers   | Pan **and** zoom    |
+| Mouse left    | Draw                |
+| Mouse middle  | Pan                 |
+| Mouse right   | Orbit               |
+| Wheel         | Zoom                |
+
+Because the pen is a distinct `pointerType` from touch, drawing and camera
+control never contend for the same gesture — which is why pinch-to-zoom can
+exist here without fighting orbit. Touch is ignored entirely while the pen is
+on or near the glass, which is the palm rejection.
+
+The camera controller is hand-written rather than `OrbitControls`, because
+`OrbitControls` claims pointer events on its element and makes this split
+impossible to express.
+
+## Operations, and where they run
+
+Anything expensive is an *operation*: a serialisable request/response pair
+declared in `core/src/ops/types.ts`, rather than a direct function call.
+
+```ts
+await session.ops.run('processStroke', { samples, spacing, ... });
+```
+
+Today `session.ops` is an `InlineOpRunner` that calls the handler on the spot.
+Stage 5 adds a worker runner and a remote runner that speaks to the PC, and
+the call sites do not change. This is the whole reason the PC-offload feature
+is an addition rather than a rewrite.
+
+## Layout
+
+```
+packages/core/          no dependencies, unit-tested, portable
+  math/                 vec3, sketch planes, ray/plane intersection
+  stroke/               1€ filter, simplify/resample, mesh sweeping
+  document/             document, layers, nodes, ids
+  history/              command stack and the concrete commands
+  ops/                  operation contracts + the inline runner
+
+apps/studio/            the app
+  viewport/             Three.js scene, camera, gestures, plane indicator
+  tools/                draw tool, tool routing
+  state/                session (mutable) + zustand store (UI mirror)
+  ui/                   React panels
+
+e2e/                    Playwright tests driving real pointer events
+```
+
+## Testing
+
+- **Unit** (`vitest`) — the core's geometry and history logic, including a
+  test that asserts strokes do not twist on curvature flips.
+- **End-to-end** (`playwright`) — a real Chromium with WebGL2 on SwiftShader,
+  driven with genuine pointer events. It asserts that a drag produces a
+  stroke, that pixels actually change in the framebuffer, that pressure
+  reaches the geometry, and that undo/redo and the eraser work.
+
+The e2e suite runs headless with no GPU, which means CI can catch a broken
+render, not just a broken build.

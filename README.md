@@ -14,12 +14,18 @@ on the PC while the pen stays immediate and local.
 
 ```bash
 npm install
-npm run dev -- --host
+npm run dev
 ```
 
-Vite prints a `Network:` URL. Open that on the tablet over the same Wi-Fi and
-use Chrome's *Add to Home screen* to install it as an app. No account, no
+Vite prints a `Network:` URL — the dev server already binds every interface,
+so no extra flag is needed. Open that URL on the tablet over the same Wi-Fi
+and use Chrome's *Add to Home screen* to install it as an app. No account, no
 internet, no deployment step.
+
+On Windows, two things that bite on a first run: PowerShell blocks npm's `.ps1`
+wrapper by default (run the commands from `cmd.exe` instead), and Windows
+Firewall prompts the first time Node opens a port — allow it on *private*
+networks or the tablet cannot reach the server.
 
 ```bash
 npm run build      # production bundle

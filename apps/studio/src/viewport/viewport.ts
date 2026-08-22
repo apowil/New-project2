@@ -48,7 +48,7 @@ export class Viewport {
   private readonly entries = new Map<string, StrokeEntry>();
   private readonly raycaster = new THREE.Raycaster();
 
-  private previewMesh: THREE.Mesh | null = null;
+  private readonly previewMeshes: THREE.Mesh[] = [];
   private previewMaterial: THREE.MeshStandardMaterial | null = null;
 
   private frameHandle = 0;
@@ -247,33 +247,62 @@ export class Viewport {
     }
   }
 
-  /** Shows the stroke currently under the pen, before it is committed. */
-  setPreview(geometry: StrokeGeometry | null, style: StrokeStyle): void {
-    if (!geometry) {
-      if (this.previewMesh) {
-        this.scene.remove(this.previewMesh);
-        this.previewMesh.geometry.dispose();
-        this.previewMaterial?.dispose();
-        this.previewMesh = null;
-        this.previewMaterial = null;
+  /**
+   * Shows the stroke currently under the pen, before it is committed.
+   *
+   * Takes a list because symmetry draws several copies at once; the meshes are
+   * pooled and reused across frames rather than rebuilt, since this runs on
+   * every frame of every stroke.
+   */
+  setPreview(geometries: StrokeGeometry[] | null, style: StrokeStyle): void {
+    const wanted = geometries ?? [];
+
+    if (wanted.length === 0) {
+      if (this.previewMeshes.length > 0) {
+        this.clearPreview();
         this.requestRender();
       }
       return;
     }
 
-    const buffer = toBufferGeometry(geometry);
-
-    if (!this.previewMesh || !this.previewMaterial) {
+    if (!this.previewMaterial) {
       this.previewMaterial = makeStrokeMaterial(style);
-      this.previewMesh = new THREE.Mesh(buffer, this.previewMaterial);
-      this.scene.add(this.previewMesh);
     } else {
-      this.previewMesh.geometry.dispose();
-      this.previewMesh.geometry = buffer;
       applyStyle(this.previewMaterial, style);
     }
 
+    for (let i = 0; i < wanted.length; i += 1) {
+      const buffer = toBufferGeometry(wanted[i]!);
+      const existing = this.previewMeshes[i];
+
+      if (existing) {
+        existing.geometry.dispose();
+        existing.geometry = buffer;
+      } else {
+        const mesh = new THREE.Mesh(buffer, this.previewMaterial);
+        this.previewMeshes.push(mesh);
+        this.scene.add(mesh);
+      }
+    }
+
+    // Drop any copies left over from a higher symmetry count.
+    while (this.previewMeshes.length > wanted.length) {
+      const mesh = this.previewMeshes.pop()!;
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+    }
+
     this.requestRender();
+  }
+
+  private clearPreview(): void {
+    for (const mesh of this.previewMeshes) {
+      this.scene.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    this.previewMeshes.length = 0;
+    this.previewMaterial?.dispose();
+    this.previewMaterial = null;
   }
 
   /** Screen point (CSS pixels) to normalised device coordinates. */
@@ -301,6 +330,25 @@ export class Viewport {
       nodeId: String(hit.object.userData.nodeId ?? ''),
       point: { x: hit.point.x, y: hit.point.y, z: hit.point.z },
       normal: { x: normal.x, y: normal.y, z: normal.z },
+    };
+  }
+
+  /**
+   * Where a screen point meets the ground plane, or null when it is above the
+   * horizon. Used as the fallback pivot when a press lands on empty space.
+   */
+  groundPointAt(x: number, y: number): Vec3 | null {
+    const ndc = this.toNdc(x, y);
+    const ray = this.camera.ray(ndc.x, ndc.y);
+    if (Math.abs(ray.direction.y) < 1e-6) return null;
+
+    const t = -ray.origin.y / ray.direction.y;
+    if (t <= 0) return null;
+
+    return {
+      x: ray.origin.x + ray.direction.x * t,
+      y: 0,
+      z: ray.origin.z + ray.direction.z * t,
     };
   }
 
@@ -366,7 +414,7 @@ export class Viewport {
   dispose(): void {
     this.stop();
     this.resizeObserver?.disconnect();
-    this.setPreview(null, {} as StrokeStyle);
+    this.clearPreview();
 
     for (const entry of this.entries.values()) {
       entry.mesh.geometry.dispose();

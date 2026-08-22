@@ -72,6 +72,54 @@ export function PlanePanel() {
       >
         Reset depth
       </button>
+
+      <MirrorRow />
+    </div>
+  );
+}
+
+/** Axis colours follow the usual convention: X red, Y green, Z blue. */
+const MIRROR_AXES = [
+  { axis: 'x' as const, label: 'X', color: '#f7768e' },
+  { axis: 'y' as const, label: 'Y', color: '#9ece6a' },
+  { axis: 'z' as const, label: 'Z', color: '#7aa2f7' },
+];
+
+function MirrorRow() {
+  const mirror = useStore((state) => state.mirror);
+  const toggleMirror = useStore((state) => state.toggleMirror);
+  const active = MIRROR_AXES.filter(({ axis }) => mirror[axis]).length;
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-ink-700/70 pt-3">
+      <span className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-ink-400">
+        <span>Symmetry</span>
+        {active > 0 && (
+          <span className="normal-case tracking-normal text-ink-200">
+            {2 ** active} copies
+          </span>
+        )}
+      </span>
+
+      <div className="grid grid-cols-3 gap-1">
+        {MIRROR_AXES.map(({ axis, label, color }) => (
+          <button
+            key={axis}
+            type="button"
+            onClick={() => toggleMirror(axis)}
+            aria-pressed={mirror[axis]}
+            title={`Mirror across the ${label} axis`}
+            className="rounded-lg py-1.5 text-xs font-medium transition-colors"
+            style={
+              mirror[axis]
+                ? { background: `${color}26`, color }
+                : { color: 'var(--color-ink-400)' }
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

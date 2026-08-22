@@ -1,12 +1,16 @@
 import {
-  AddNodeCommand,
+  AddNodesCommand,
   DEFAULT_STROKE_STYLE,
   PointerFilter,
   buildStrokeGeometry,
   createId,
   isLayerEditable,
+  mirrorCombinations,
+  mirrorSamples,
+  mirrorVec3,
   raycastPlane,
   type Plane,
+  type StrokeGeometry,
   type StrokeNode,
   type StrokeSample,
   type StrokeStyle,
@@ -114,16 +118,28 @@ export class DrawTool {
     this.previewDirty = false;
 
     const style = this.style;
-    const geometry = buildStrokeGeometry(this.samples, {
+    const normal = this.plane?.normal;
+    const options = {
       width: style.width,
       // Fewer sides while drawing: the preview is rebuilt every frame and the
       // difference is invisible at stroke thickness.
       sides: Math.max(4, Math.floor(style.sides / 2)),
       flatness: style.flatness,
-      initialNormal: this.plane?.normal,
-    });
+    };
 
-    this.viewport.setPreview(geometry, style);
+    const geometries: StrokeGeometry[] = [];
+    const first = buildStrokeGeometry(this.samples, { ...options, initialNormal: normal });
+    if (first) geometries.push(first);
+
+    for (const flip of mirrorCombinations(useStore.getState().mirror)) {
+      const geometry = buildStrokeGeometry(mirrorSamples(this.samples, flip), {
+        ...options,
+        initialNormal: normal ? mirrorVec3(normal, flip) : undefined,
+      });
+      if (geometry) geometries.push(geometry);
+    }
+
+    this.viewport.setPreview(geometries, style);
   }
 
   async end(): Promise<void> {
@@ -152,17 +168,29 @@ export class DrawTool {
     if (processed.length < 2) return;
 
     const store = useStore.getState();
-    const node: StrokeNode = {
+    const createdAt = Date.now();
+    const makeNode = (samples: typeof processed, planeNormal: typeof plane.normal): StrokeNode => ({
       id: createId('stroke'),
       type: 'stroke',
       layerId: store.activeLayerId,
-      samples: processed,
+      samples,
       style: { ...DEFAULT_STROKE_STYLE, ...style },
-      planeNormal: plane.normal,
-      createdAt: Date.now(),
-    };
+      planeNormal,
+      createdAt,
+    });
 
-    store.run(new AddNodeCommand(node));
+    const nodes: StrokeNode[] = [makeNode(processed, plane.normal)];
+    const mirrors = mirrorCombinations(store.mirror);
+    for (const flip of mirrors) {
+      nodes.push(makeNode(mirrorSamples(processed, flip), mirrorVec3(plane.normal, flip)));
+    }
+
+    store.run(
+      new AddNodesCommand(
+        nodes,
+        mirrors.length > 0 ? 'Draw mirrored stroke' : 'Draw stroke',
+      ),
+    );
   }
 
   cancel(): void {

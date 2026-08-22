@@ -7,7 +7,7 @@ Think [feather.art](https://www.feather.art/), but for Android, and with an
 extra trick: pair the tablet with the Windows app and the heavy operations run
 on the PC while the pen stays immediate and local.
 
-**Stage 1 of 7 is built** — the sketching core. See
+**Sketching core, persistence and symmetry are built.** See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what is done and what is next.
 
 ## Try it
@@ -39,8 +39,12 @@ npm run typecheck
 | Mouse right  | Orbit            |
 | Wheel        | Zoom             |
 
+Press and hold with a finger — or middle-click — to re-centre the orbit on
+whatever is under it.
+
 Keys: `D` draw · `E` erase · `P` place sketch plane · `F` frame everything ·
-`[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo.
+`[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo · `Ctrl+S` save ·
+`Ctrl+O` sketches.
 
 **Sketch planes** are the thing to understand. Strokes land on a plane in
 space. By default that plane faces you, so drawing feels like paper — then you
@@ -54,14 +58,17 @@ it, so you can draw directly onto existing geometry.
 - Full digitiser sample rate via coalesced pointer events, 1€-filtered
 - Undo/redo, layers, eraser
 - Camera-facing / ground / front / side / surface sketch planes
+- Symmetry across X, Y and Z — any combination, up to eight copies at once
+- Autosave, a project library with thumbnails, and `.wisp` import/export
 - Installable, offline-capable PWA
 - Renders on demand, so a still sketch costs no battery
 
 ## What is not here yet
 
-No saving — reloading loses the sketch (stage 3). No selection or transform
-tools (stage 2). No export (stage 4). The PC compute link is designed for but
-not built (stage 5). The Android APK shell is stage 6.
+No selection or transform tools, so strokes cannot be edited after they are
+drawn — only erased (stage 2). No liquify (stage 2.5). No glTF/OBJ/image
+export (stage 4). The PC compute link is designed for but not built (stage 5).
+The Android APK shell is stage 6.
 
 ## Layout
 

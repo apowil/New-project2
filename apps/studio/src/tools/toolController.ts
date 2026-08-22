@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import { DeleteNodesCommand } from '@wisp/core';
 
 import { type GestureHandlers, type StrokeInput } from '../viewport/gestures.js';
@@ -56,6 +57,20 @@ export class ToolController implements GestureHandlers {
   };
 
   onCameraChange = (): void => {
+    this.viewport.requestRender();
+  };
+
+  /**
+   * Re-centres the orbit on whatever was pressed. Falls back to the ground
+   * plane when nothing was hit, so pressing empty space still does something
+   * predictable rather than nothing.
+   */
+  onPinOrbit = (x: number, y: number): void => {
+    const hit = this.viewport.pickSurface(x, y);
+    const point = hit ? hit.point : this.viewport.groundPointAt(x, y);
+    if (!point) return;
+
+    this.viewport.camera.pinTarget(new Vector3(point.x, point.y, point.z));
     this.viewport.requestRender();
   };
 

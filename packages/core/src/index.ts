@@ -13,6 +13,14 @@ export {
   arcLength,
 } from './stroke/resample.js';
 export {
+  type MirrorAxes,
+  NO_MIRROR,
+  hasMirror,
+  mirrorCombinations,
+  mirrorSamples,
+  mirrorVec3,
+} from './stroke/mirror.js';
+export {
   type StrokeGeometry,
   type StrokeGeometryOptions,
   DEFAULT_STROKE_OPTIONS,

@@ -39,6 +39,8 @@ export interface GestureHandlers {
   onStrokeCancel(): void;
   onHover(input: StrokeInput | null): void;
   onCameraChange(): void;
+  /** Long-press with a finger, or a middle-click: re-centre the orbit here. */
+  onPinOrbit(x: number, y: number): void;
 }
 
 export type TouchIntent = 'camera' | 'draw';
@@ -62,6 +64,11 @@ interface TouchPoint {
 /** How long after the pen leaves that touch stays ignored, in ms. */
 const PALM_GUARD_MS = 600;
 
+/** Hold this long without sliding to pin the orbit point. */
+const LONG_PRESS_MS = 450;
+/** Movement beyond this many pixels means it was a drag, not a press. */
+const LONG_PRESS_SLOP = 12;
+
 export class InputRouter {
   private touches: TouchPoint[] = [];
   private strokePointerId: number | null = null;
@@ -76,6 +83,10 @@ export class InputRouter {
 
   private penLastSeen = 0;
   private disposed = false;
+
+  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private pressOrigin: { x: number; y: number } | null = null;
+  private suppressOrbit = false;
 
   touchIntent: TouchIntent;
   orbitSpeed: number;
@@ -102,6 +113,7 @@ export class InputRouter {
 
   dispose(): void {
     this.disposed = true;
+    this.cancelLongPress();
     const el = this.element;
     el.removeEventListener('pointerdown', this.onPointerDown);
     el.removeEventListener('pointermove', this.onPointerMove);
@@ -203,11 +215,13 @@ export class InputRouter {
           this.cameraPointerId = event.pointerId;
           this.lastX = event.clientX;
           this.lastY = event.clientY;
+          this.beginLongPress(event.clientX, event.clientY);
         }
         return;
       }
 
       // A second finger always means "camera", even if the first was drawing.
+      this.cancelLongPress();
       this.cancelStroke();
       this.cameraMode = 'pan';
       this.cameraPointerId = null;
@@ -223,6 +237,7 @@ export class InputRouter {
       this.cameraPointerId = event.pointerId;
       this.lastX = event.clientX;
       this.lastY = event.clientY;
+      this.pressOrigin = { x: event.clientX, y: event.clientY };
       this.capture(event.pointerId);
       event.preventDefault();
     } else if (event.button === 2) {
@@ -290,10 +305,47 @@ export class InputRouter {
   };
 
   private applyOrbit(x: number, y: number): void {
+    this.checkLongPressSlop(x, y);
+    // While the press is still a candidate, hold the camera still — otherwise
+    // the tiny wobble of a finger resting on glass drifts the view before the
+    // pin fires.
+    if (this.suppressOrbit) {
+      this.lastX = x;
+      this.lastY = y;
+      return;
+    }
+
     this.camera.orbit((x - this.lastX) * this.orbitSpeed, (y - this.lastY) * this.orbitSpeed);
     this.lastX = x;
     this.lastY = y;
     this.handlers.onCameraChange();
+  }
+
+  private beginLongPress(x: number, y: number): void {
+    this.cancelLongPress();
+    this.pressOrigin = { x, y };
+    this.suppressOrbit = true;
+    this.longPressTimer = setTimeout(() => {
+      this.longPressTimer = null;
+      this.suppressOrbit = false;
+      const rect = this.element.getBoundingClientRect();
+      this.handlers.onPinOrbit(x - rect.left, y - rect.top);
+    }, LONG_PRESS_MS);
+  }
+
+  private checkLongPressSlop(x: number, y: number): void {
+    if (!this.pressOrigin || this.longPressTimer === null) return;
+    if (Math.hypot(x - this.pressOrigin.x, y - this.pressOrigin.y) > LONG_PRESS_SLOP) {
+      this.cancelLongPress();
+    }
+  }
+
+  private cancelLongPress(): void {
+    if (this.longPressTimer !== null) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    this.suppressOrbit = false;
   }
 
   private applyPan(x: number, y: number): void {
@@ -337,6 +389,7 @@ export class InputRouter {
     }
 
     if (event.pointerType === 'touch') {
+      this.cancelLongPress();
       this.touches = this.touches.filter((t) => t.id !== event.pointerId);
 
       if (this.touches.length === 1) {
@@ -357,6 +410,19 @@ export class InputRouter {
     }
 
     if (this.cameraPointerId === event.pointerId) {
+      // A middle button pressed and released without travelling is a click,
+      // not a pan, and pins the orbit point.
+      if (
+        event.button === 1 &&
+        this.pressOrigin &&
+        Math.hypot(event.clientX - this.pressOrigin.x, event.clientY - this.pressOrigin.y) <
+          LONG_PRESS_SLOP
+      ) {
+        const rect = this.element.getBoundingClientRect();
+        this.handlers.onPinOrbit(event.clientX - rect.left, event.clientY - rect.top);
+      }
+
+      this.pressOrigin = null;
       this.cameraMode = 'none';
       this.cameraPointerId = null;
       this.release(event.pointerId);

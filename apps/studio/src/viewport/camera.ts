@@ -70,6 +70,18 @@ export class OrbitCamera {
     this.targetGoal.addScaledVector(up, deltaY * worldPerPixel);
   }
 
+  /**
+   * Re-centres the orbit on a point in the scene, gliding rather than jumping.
+   *
+   * Without this the camera always pivots around wherever it started, so
+   * inspecting a detail off to one side means fighting the orbit the whole
+   * way. Pinning the pivot to the thing you are looking at is the single
+   * biggest navigation improvement on a small screen.
+   */
+  pinTarget(point: THREE.Vector3): void {
+    this.targetGoal.copy(point);
+  }
+
   /** `factor` > 1 moves away, < 1 moves closer. */
   dolly(factor: number): void {
     this.radiusGoal = clamp(this.radiusGoal * factor, this.minRadius, this.maxRadius);

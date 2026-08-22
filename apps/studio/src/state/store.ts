@@ -9,8 +9,10 @@ import {
   createDocument,
   createLayer,
   deserializeDocument,
+  NO_MIRROR,
   type Command,
   type Layer,
+  type MirrorAxes,
   type OpRunner,
   type SketchDocument,
   type StrokeStyle,
@@ -62,6 +64,8 @@ interface AppState {
   plane: PlaneState;
   touchIntent: TouchIntent;
   showPlaneIndicator: boolean;
+  /** Reflect each new stroke through these world-origin planes. */
+  mirror: MirrorAxes;
 
   /** Mirrors `session.document.revision` so React knows when to re-read. */
   revision: number;
@@ -90,6 +94,7 @@ interface AppState {
   setTouchIntent: (intent: TouchIntent) => void;
   setShowPlaneIndicator: (show: boolean) => void;
   setStatusMessage: (message: string | null) => void;
+  toggleMirror: (axis: keyof MirrorAxes) => void;
 
   run: (command: Command) => void;
   undo: () => void;
@@ -119,6 +124,7 @@ export const useStore = create<AppState>((set, get) => ({
   plane: { ...DEFAULT_PLANE_STATE },
   touchIntent: 'camera',
   showPlaneIndicator: true,
+  mirror: { ...NO_MIRROR },
 
   revision: session.document.revision,
   documentEpoch: 0,
@@ -150,6 +156,9 @@ export const useStore = create<AppState>((set, get) => ({
   setTouchIntent: (touchIntent) => set({ touchIntent }),
   setShowPlaneIndicator: (showPlaneIndicator) => set({ showPlaneIndicator }),
   setStatusMessage: (statusMessage) => set({ statusMessage }),
+
+  toggleMirror: (axis) =>
+    set((state) => ({ mirror: { ...state.mirror, [axis]: !state.mirror[axis] } })),
 
   run: (command) => {
     session.history.run(command);

@@ -27,6 +27,31 @@ export class AddNodeCommand implements Command {
   }
 }
 
+/**
+ * Adds several nodes as one history step — a mirrored stroke is one action to
+ * the person drawing it, so one undo has to take all of its copies with it.
+ */
+export class AddNodesCommand implements Command {
+  readonly label: string;
+  private indices: Array<number | undefined> = [];
+
+  constructor(private readonly nodes: SceneNode[], label = 'Draw stroke') {
+    this.label = label;
+  }
+
+  apply(doc: SketchDocument): void {
+    this.nodes.forEach((node, i) => addNode(doc, node, this.indices[i]));
+  }
+
+  revert(doc: SketchDocument): void {
+    // Reverse order so each recorded index is still valid on redo.
+    this.indices = [];
+    for (let i = this.nodes.length - 1; i >= 0; i -= 1) {
+      this.indices[i] = removeNode(doc, this.nodes[i]!.id);
+    }
+  }
+}
+
 export class DeleteNodesCommand implements Command {
   readonly label: string;
   private removed: Array<{ node: SceneNode; index: number }> = [];

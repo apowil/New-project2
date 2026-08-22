@@ -29,3 +29,11 @@ export * from './history/commands.js';
 
 export * from './ops/types.js';
 export { handlers, InlineOpRunner } from './ops/handlers.js';
+
+export { serializeDocument, deserializeDocument } from './io/serialize.js';
+export {
+  WispFormatError,
+  WISP_FORMAT_VERSION,
+  WISP_MAGIC,
+  type WispManifest,
+} from './io/format.js';

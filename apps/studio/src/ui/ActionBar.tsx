@@ -1,5 +1,5 @@
 import { useStore } from '../state/store.js';
-import { FrameIcon, RedoIcon, TrashIcon, UndoIcon } from './Icons.js';
+import { FolderIcon, FrameIcon, RedoIcon, UndoIcon } from './Icons.js';
 
 interface ActionBarProps {
   onFrameAll: () => void;
@@ -11,7 +11,7 @@ export function ActionBar({ onFrameAll }: ActionBarProps) {
   const undoLabel = useStore((state) => state.undoLabel);
   const undo = useStore((state) => state.undo);
   const redo = useStore((state) => state.redo);
-  const newSketch = useStore((state) => state.newSketch);
+  const setProjectsOpen = useStore((state) => state.setProjectsOpen);
 
   return (
     <div className="panel pointer-events-auto flex items-center gap-1 p-1.5">
@@ -52,13 +52,11 @@ export function ActionBar({ onFrameAll }: ActionBarProps) {
       <button
         type="button"
         className="tool-button"
-        onClick={() => {
-          if (window.confirm('Start a new sketch? Unsaved work will be lost.')) newSketch();
-        }}
-        title="New sketch"
-        aria-label="New sketch"
+        onClick={() => setProjectsOpen(true)}
+        title="Sketches (Ctrl+O)"
+        aria-label="Sketches"
       >
-        <TrashIcon />
+        <FolderIcon />
       </button>
     </div>
   );

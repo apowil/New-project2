@@ -99,6 +99,34 @@ export const PlusIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const FolderIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M3 7a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.5.7l1 1.3H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
+export const DownloadIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <path d="M12 4v11" />
+    <path d="M8 11.5l4 4 4-4" />
+    <path d="M4 19h16" />
+  </svg>
+);
+
+export const UploadIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <path d="M12 15V4" />
+    <path d="M8 7.5l4-4 4 4" />
+    <path d="M4 19h16" />
+  </svg>
+);
+
+export const CloseIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 export const TrashIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M4 7h16" />

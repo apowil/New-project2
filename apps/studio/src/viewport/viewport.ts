@@ -324,10 +324,43 @@ export class Viewport {
     };
   }
 
-  /** PNG data URL of the current frame. */
+  /** PNG data URL of the current frame, at full render resolution. */
   snapshot(): string {
     this.renderer.render(this.scene, this.camera.camera);
     return this.canvas.toDataURL('image/png');
+  }
+
+  /**
+   * Small JPEG data URL for the project browser. JPEG rather than PNG because
+   * these are stored per project and the background is opaque anyway — PNG
+   * thumbnails run about eight times larger for no visible gain.
+   */
+  thumbnail(maxWidth = 360): string | null {
+    const { width, height } = this.canvas;
+    if (width === 0 || height === 0) return null;
+
+    // The plane indicator is a drawing aid, not part of the artwork.
+    const indicatorWasVisible = this.planeIndicator.object.visible;
+    this.planeIndicator.setVisible(false);
+    this.renderer.render(this.scene, this.camera.camera);
+    this.planeIndicator.setVisible(indicatorWasVisible);
+    this.requestRender();
+
+    const scale = Math.min(1, maxWidth / width);
+    const target = document.createElement('canvas');
+    target.width = Math.max(1, Math.round(width * scale));
+    target.height = Math.max(1, Math.round(height * scale));
+
+    const context = target.getContext('2d');
+    if (!context) return null;
+
+    context.drawImage(this.canvas, 0, 0, target.width, target.height);
+    try {
+      return target.toDataURL('image/jpeg', 0.72);
+    } catch {
+      // A tainted canvas cannot be read back; a missing thumbnail is fine.
+      return null;
+    }
   }
 
   dispose(): void {

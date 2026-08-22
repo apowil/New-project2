@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import { session, useStore } from './state/store.js';
+import { autoSaver, session, setThumbnailProvider, useStore } from './state/store.js';
 import { InputRouter } from './viewport/gestures.js';
 import { resolvePlane } from './viewport/sketchPlane.js';
 import { Viewport } from './viewport/viewport.js';
 import { ToolController } from './tools/toolController.js';
 import { ActionBar } from './ui/ActionBar.js';
+import { DocumentBar } from './ui/DocumentBar.js';
 import { LayersPanel } from './ui/LayersPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
+import { ProjectsPanel } from './ui/ProjectsPanel.js';
+import { StatusToast } from './ui/StatusToast.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
 
@@ -17,6 +20,7 @@ export function App() {
   const routerRef = useRef<InputRouter | null>(null);
 
   const revision = useStore((state) => state.revision);
+  const documentEpoch = useStore((state) => state.documentEpoch);
   const plane = useStore((state) => state.plane);
   const tool = useStore((state) => state.tool);
   const showPlaneIndicator = useStore((state) => state.showPlaneIndicator);
@@ -44,13 +48,21 @@ export function App() {
       );
     };
 
+    setThumbnailProvider(() => viewport.thumbnail());
+    const detachAutoSave = autoSaver.attach();
+
     viewport.syncDocument(session.document, true);
     viewport.start();
 
     viewportRef.current = viewport;
     routerRef.current = router;
 
+    // Reopen whatever was last being drawn.
+    void useStore.getState().boot();
+
     return () => {
+      detachAutoSave();
+      setThumbnailProvider(null);
       router.dispose();
       viewport.dispose();
       viewportRef.current = null;
@@ -62,6 +74,18 @@ export function App() {
   useEffect(() => {
     viewportRef.current?.syncDocument(session.document);
   }, [revision]);
+
+  // A replaced document reuses low revision numbers, so the scene has to be
+  // rebuilt rather than diffed against the previous document's revision.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.syncDocument(session.document, true);
+
+    const bounds = viewport.contentBounds();
+    if (!bounds.isEmpty()) viewport.camera.frame(bounds);
+    viewport.requestRender();
+  }, [documentEpoch]);
 
   // Panels changed something the viewport draws; ask for a frame.
   useEffect(() => {
@@ -103,6 +127,20 @@ export function App() {
         return;
       }
 
+      if (meta && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void store.saveNow();
+        return;
+      }
+
+      if (meta && event.key.toLowerCase() === 'o') {
+        event.preventDefault();
+        store.setProjectsOpen(true);
+        return;
+      }
+
+      if (meta) return; // leave every other browser shortcut alone
+
       switch (event.key.toLowerCase()) {
         case 'd':
           store.setTool('draw');
@@ -138,8 +176,9 @@ export function App() {
       {/* One overlay, pointer-events off, so a stroke that strays over the UI
           keeps drawing. Individual panels opt back in. */}
       <div className="pointer-events-none absolute inset-0 select-none">
-        <header className="absolute left-4 top-4 flex items-center gap-3">
+        <header className="absolute left-4 top-4 flex items-start gap-3">
           <Toolbar />
+          <DocumentBar />
         </header>
 
         <div className="absolute right-4 top-4 flex flex-col items-end gap-3">
@@ -158,6 +197,9 @@ export function App() {
         <p className="absolute bottom-4 right-4 max-w-56 text-right text-[11px] leading-relaxed text-ink-400">
           Pen draws · one finger orbits · two fingers pan &amp; zoom
         </p>
+
+        <StatusToast />
+        <ProjectsPanel />
       </div>
     </div>
   );

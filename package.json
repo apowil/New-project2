@@ -15,7 +15,8 @@
     "typecheck": "npm run typecheck --workspace @wisp/core && npm run typecheck --workspace @wisp/studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "bundle:single": "npm run build:single --workspace @wisp/studio && node scripts/bundle-single.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

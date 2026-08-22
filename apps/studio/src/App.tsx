@@ -11,6 +11,7 @@ import { LayersPanel } from './ui/LayersPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
+import { Marquee, SelectionPanel } from './ui/SelectionPanel.js';
 import { StatusToast } from './ui/StatusToast.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
@@ -29,6 +30,7 @@ export function App() {
   const showPlaneIndicator = useStore((state) => state.showPlaneIndicator);
   const touchIntent = useStore((state) => state.touchIntent);
   const resolvedTheme = useStore((state) => state.resolvedTheme);
+  const selection = useStore((state) => state.selection);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -77,6 +79,16 @@ export function App() {
   useEffect(() => {
     viewportRef.current?.setTheme(resolvedTheme);
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    viewportRef.current?.setSelection(new Set(selection));
+  }, [selection]);
+
+  // A newly synced scene has fresh materials, so the highlight has to be
+  // re-applied after the document changes as well as after the selection does.
+  useEffect(() => {
+    viewportRef.current?.setSelection(new Set(useStore.getState().selection));
+  }, [revision, documentEpoch]);
 
   useEffect(() =>
     watchSystemTheme(() => {
@@ -177,7 +189,41 @@ export function App() {
         return;
       }
 
+      if (meta && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        store.selectLayer(store.activeLayerId);
+        return;
+      }
+
+      if (meta && event.key.toLowerCase() === 'c') {
+        store.copySelection();
+        return;
+      }
+
+      if (meta && event.key.toLowerCase() === 'x') {
+        store.cutSelection();
+        return;
+      }
+
+      if (meta && event.key.toLowerCase() === 'v') {
+        store.paste();
+        return;
+      }
+
       if (meta) return; // leave every other browser shortcut alone
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        if (store.selection.length > 0) {
+          event.preventDefault();
+          store.deleteSelection();
+        }
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        store.clearSelection();
+        return;
+      }
 
       switch (event.key.toLowerCase()) {
         case 'd':
@@ -185,6 +231,9 @@ export function App() {
           break;
         case 'e':
           store.setTool('erase');
+          break;
+        case 's':
+          store.setTool('select');
           break;
         case 'p':
           store.setTool('plane');
@@ -235,7 +284,8 @@ export function App() {
           <LayersPanel />
         </div>
 
-        <div className="absolute bottom-4 left-4">
+        <div className="absolute bottom-4 left-4 flex flex-col gap-3">
+          <SelectionPanel />
           <PlanePanel />
         </div>
 
@@ -247,6 +297,7 @@ export function App() {
           Pen draws · one finger orbits · two fingers pan &amp; zoom
         </p>
 
+        <Marquee />
         <ReferenceOverlay />
         <StatusToast />
         <ProjectsPanel />

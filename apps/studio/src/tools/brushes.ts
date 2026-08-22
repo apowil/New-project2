@@ -3,115 +3,122 @@ import { DEFAULT_STROKE_STYLE, type StrokeStyle } from '@wisp/core';
 /**
  * Brush presets.
  *
- * A brush is a named set of *shape* parameters — cross-section, taper, how
- * hard pressure bites. Colour and size are deliberately not part of a preset:
- * switching brush mid-sketch should not silently change what colour you are
- * drawing in.
+ * A brush is a named set of everything except colour and size — cross-section,
+ * taper, how hard pressure bites, surface finish, and translucency. Colour and
+ * size stay yours: switching from a pen to a marker should not silently change
+ * what colour you are drawing in or how big the mark is.
+ *
+ * Opacity is part of a brush rather than a separate control because it is what
+ * *makes* a water marker a water marker; a fully opaque one is just a pen.
  */
 export interface Brush {
   id: string;
   name: string;
   description: string;
-  shape: Omit<StrokeStyle, 'color' | 'width' | 'opacity'>;
+  shape: Omit<StrokeStyle, 'color' | 'width'>;
 }
-
-const base = {
-  roughness: DEFAULT_STROKE_STYLE.roughness,
-  metalness: DEFAULT_STROKE_STYLE.metalness,
-};
 
 export const BRUSHES: Brush[] = [
   {
-    id: 'ink',
-    name: 'Ink',
-    description: 'Flat, chisel-like, with a strong taper — the default sketching brush',
+    id: 'round-brush',
+    name: 'Round brush',
+    description: 'Full round body, strong pressure response and a soft taper',
     shape: {
-      ...base,
-      flatness: 0.45,
-      sides: 8,
-      taper: 0.14,
-      pressureCurve: 1.4,
-      minPressureScale: 0.35,
-    },
-  },
-  {
-    id: 'round',
-    name: 'Round',
-    description: 'A full round tube — reads as wire or armature',
-    shape: {
-      ...base,
       flatness: 1,
       sides: 12,
-      taper: 0.06,
-      pressureCurve: 1.2,
-      minPressureScale: 0.5,
-      roughness: 0.5,
+      taper: 0.18,
+      pressureCurve: 1.5,
+      minPressureScale: 0.28,
+      opacity: 1,
+      roughness: 0.62,
+      metalness: 0,
     },
   },
   {
-    id: 'ribbon',
-    name: 'Ribbon',
-    description: 'Nearly flat, like a brush loaded with paint',
+    id: 'flat-brush',
+    name: 'Flat brush',
+    description: 'Chisel edge — width depends on the direction you pull it',
     shape: {
-      ...base,
-      flatness: 0.14,
+      flatness: 0.12,
       sides: 8,
       taper: 0.2,
       pressureCurve: 1.6,
       minPressureScale: 0.25,
+      opacity: 1,
+      roughness: 0.66,
+      metalness: 0,
     },
   },
   {
-    id: 'marker',
-    name: 'Marker',
-    description: 'Even width, blunt ends — good for blocking in',
+    id: 'pen',
+    name: 'Pen',
+    description: 'Near-constant width, crisp and slightly glossy',
     shape: {
-      ...base,
-      flatness: 0.35,
-      sides: 6,
-      taper: 0.02,
+      flatness: 0.75,
+      sides: 8,
+      taper: 0.05,
       pressureCurve: 1,
-      minPressureScale: 0.85,
-      roughness: 0.8,
+      minPressureScale: 0.82,
+      opacity: 1,
+      roughness: 0.34,
+      metalness: 0,
     },
   },
   {
-    id: 'liner',
-    name: 'Liner',
-    description: 'Fine, sharply tapered — for detail and hatching',
+    id: 'pencil',
+    name: 'Pencil',
+    description: 'Matte and dry, with the grainy width change of graphite',
     shape: {
-      ...base,
-      flatness: 0.6,
+      flatness: 0.5,
       sides: 6,
-      taper: 0.35,
-      pressureCurve: 2.1,
-      minPressureScale: 0.15,
+      taper: 0.12,
+      pressureCurve: 2,
+      minPressureScale: 0.3,
+      opacity: 0.92,
+      roughness: 0.97,
+      metalness: 0,
     },
   },
   {
-    id: 'chrome',
-    name: 'Chrome',
-    description: 'Polished metal, catches the light',
+    id: 'water-round',
+    name: 'Water marker round',
+    description: 'Translucent and round — overlaps build up colour',
     shape: {
-      flatness: 0.8,
-      sides: 12,
-      taper: 0.08,
-      pressureCurve: 1.2,
-      minPressureScale: 0.5,
-      roughness: 0.12,
-      metalness: 0.95,
+      flatness: 0.9,
+      sides: 10,
+      taper: 0.1,
+      pressureCurve: 1.1,
+      minPressureScale: 0.6,
+      opacity: 0.42,
+      roughness: 0.88,
+      metalness: 0,
+    },
+  },
+  {
+    id: 'water-flat',
+    name: 'Water marker flat',
+    description: 'Translucent chisel — broad washes with a hard edge',
+    shape: {
+      flatness: 0.16,
+      sides: 8,
+      taper: 0.06,
+      pressureCurve: 1.1,
+      minPressureScale: 0.7,
+      opacity: 0.42,
+      roughness: 0.9,
+      metalness: 0,
     },
   },
 ];
 
-export const DEFAULT_BRUSH_ID = 'ink';
+export const DEFAULT_BRUSH_ID = 'pen';
 
 export const findBrush = (id: string): Brush =>
   BRUSHES.find((brush) => brush.id === id) ?? BRUSHES[0]!;
 
 /**
  * Which preset a style corresponds to, or null once it has been hand-tweaked.
- * Lets the UI show "Ink" as selected until you move a slider, then show none.
+ * Lets the UI show the brush name until you move a slider, then show none.
  */
 export function matchBrush(style: StrokeStyle): string | null {
   for (const brush of BRUSHES) {
@@ -122,3 +129,10 @@ export function matchBrush(style: StrokeStyle): string | null {
   }
   return null;
 }
+
+/** Starting style for a fresh sketch, on a stroke colour the theme supplies. */
+export const styleForBrush = (id: string, color: string): StrokeStyle => ({
+  ...DEFAULT_STROKE_STYLE,
+  ...findBrush(id).shape,
+  color,
+});

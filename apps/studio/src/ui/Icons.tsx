@@ -127,6 +127,20 @@ export const CloseIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const CursorIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M5 3l14 7.5-6.2 1.8L10 19z" />
+  </svg>
+);
+
+export const MergeDownIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <path d="M12 3v10" />
+    <path d="M8.5 9.5L12 13l3.5-3.5" />
+    <path d="M4 18h16" />
+  </svg>
+);
+
 export const ImageIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <rect x="3" y="5" width="18" height="14" rx="2" />

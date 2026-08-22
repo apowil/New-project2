@@ -22,7 +22,11 @@
  */
 
 export const WISP_MAGIC = 0x50534957; // "WISP" read as u32 little-endian
-export const WISP_FORMAT_VERSION = 1;
+/**
+ * 2 added baked meshes. Version 1 files still load — the reader only rejects
+ * versions it is too old to understand.
+ */
+export const WISP_FORMAT_VERSION = 2;
 
 /** Bytes per stroke sample: x, y, z, pressure. */
 export const SAMPLE_STRIDE = 16;
@@ -50,6 +54,25 @@ export interface StrokeManifestNode {
   samples: SampleRange;
 }
 
+/** Byte offsets into the binary section for one baked mesh. */
+export interface BakedRange {
+  vertexCount: number;
+  positionsOffset: number;
+  normalsOffset: number;
+  indexCount: number;
+  indicesOffset: number;
+}
+
+export interface BakedManifestNode {
+  id: string;
+  type: 'baked';
+  layerId: string;
+  createdAt: number;
+  label: string;
+  style: Record<string, unknown>;
+  geometry: BakedRange;
+}
+
 export interface MeshManifestNode {
   id: string;
   type: 'mesh';
@@ -60,7 +83,7 @@ export interface MeshManifestNode {
   transform: Record<string, unknown>;
 }
 
-export type ManifestNode = StrokeManifestNode | MeshManifestNode;
+export type ManifestNode = StrokeManifestNode | MeshManifestNode | BakedManifestNode;
 
 export interface WispManifest {
   id: string;

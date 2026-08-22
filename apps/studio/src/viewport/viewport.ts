@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import {
   buildStrokeGeometry,
   visibleNodes,
+  type BakedMeshNode,
   type SketchDocument,
   type StrokeGeometry,
   type StrokeNode,
@@ -32,6 +33,7 @@ interface StrokeEntry {
   samplesRef: unknown;
   styleRef: unknown;
   layerOpacity: number;
+  selected?: boolean;
 }
 
 export interface SurfaceHit {
@@ -217,9 +219,14 @@ export class Viewport {
     const seen = new Set<string>();
 
     for (const node of visibleNodes(doc)) {
-      if (node.type !== 'stroke') continue; // primitives arrive in stage 2
-      seen.add(node.id);
-      this.syncStroke(node, layerOpacity.get(node.layerId) ?? 1);
+      if (node.type === 'stroke') {
+        seen.add(node.id);
+        this.syncStroke(node, layerOpacity.get(node.layerId) ?? 1);
+      } else if (node.type === 'baked') {
+        seen.add(node.id);
+        this.syncBaked(node, layerOpacity.get(node.layerId) ?? 1);
+      }
+      // 'mesh' primitives arrive in stage 2.
     }
 
     for (const [id, entry] of this.entries) {
@@ -231,6 +238,105 @@ export class Viewport {
     }
 
     this.requestRender();
+  }
+
+  /**
+   * Baked geometry has no centreline to re-sweep, so its buffers are uploaded
+   * as-is and only re-uploaded if the arrays themselves are replaced.
+   */
+  private syncBaked(node: BakedMeshNode, layerOpacity: number): void {
+    const existing = this.entries.get(node.id);
+
+    if (!existing) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(node.positions, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(node.normals, 3));
+      geometry.setIndex(new THREE.BufferAttribute(node.indices, 1));
+      geometry.computeBoundingSphere();
+      geometry.computeBoundingBox();
+
+      const material = makeStrokeMaterial(node.style);
+      material.opacity = node.style.opacity * layerOpacity;
+      material.transparent = material.opacity < 1;
+      // A cut surface shows its inside where it was opened.
+      material.side = THREE.DoubleSide;
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData.nodeId = node.id;
+      this.strokeGroup.add(mesh);
+
+      this.entries.set(node.id, {
+        mesh,
+        material,
+        samplesRef: node.positions,
+        styleRef: node.style,
+        layerOpacity,
+      });
+      return;
+    }
+
+    if (existing.styleRef !== node.style || existing.layerOpacity !== layerOpacity) {
+      applyStyle(existing.material, node.style);
+      existing.material.opacity = node.style.opacity * layerOpacity;
+      existing.material.transparent = existing.material.opacity < 1;
+      existing.material.side = THREE.DoubleSide;
+      existing.styleRef = node.style;
+      existing.layerOpacity = layerOpacity;
+    }
+  }
+
+  /**
+   * Highlights the current selection.
+   *
+   * An emissive tint rather than an outline pass: it costs nothing extra to
+   * render, survives being viewed from any angle, and reads clearly on both
+   * light and dark grounds.
+   */
+  setSelection(ids: ReadonlySet<string>): void {
+    let changed = false;
+
+    for (const [id, entry] of this.entries) {
+      const selected = ids.has(id);
+      if (entry.selected === selected) continue;
+
+      entry.selected = selected;
+      entry.material.emissive.set(selected ? 0x2f7d6d : 0x000000);
+      entry.material.emissiveIntensity = selected ? 1 : 0;
+      entry.material.needsUpdate = true;
+      changed = true;
+    }
+
+    if (changed) this.requestRender();
+  }
+
+  /** Nodes whose centre projects inside a screen-space rectangle. */
+  nodesInRect(x0: number, y0: number, x1: number, y1: number): string[] {
+    const left = Math.min(x0, x1);
+    const right = Math.max(x0, x1);
+    const top = Math.min(y0, y1);
+    const bottom = Math.max(y0, y1);
+
+    const width = this.canvas.clientWidth || 1;
+    const height = this.canvas.clientHeight || 1;
+    const centre = new THREE.Vector3();
+    const found: string[] = [];
+
+    for (const [id, entry] of this.entries) {
+      const sphere = entry.mesh.geometry.boundingSphere;
+      if (!sphere) continue;
+
+      centre.copy(sphere.center).project(this.camera.camera);
+      // Behind the camera projects to a mirrored position; exclude it.
+      if (centre.z > 1) continue;
+
+      const screenX = ((centre.x + 1) / 2) * width;
+      const screenY = ((1 - centre.y) / 2) * height;
+      if (screenX >= left && screenX <= right && screenY >= top && screenY <= bottom) {
+        found.push(id);
+      }
+    }
+
+    return found;
   }
 
   private syncStroke(node: StrokeNode, layerOpacity: number): void {

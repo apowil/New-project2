@@ -1,5 +1,13 @@
 import { useStore } from '../state/store.js';
-import { EyeIcon, EyeOffIcon, LockIcon, PlusIcon, UnlockIcon } from './Icons.js';
+import {
+  CopyIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  MergeDownIcon,
+  PlusIcon,
+  UnlockIcon,
+} from './Icons.js';
 
 export function LayersPanel() {
   const layers = useStore((state) => state.layers);
@@ -8,9 +16,12 @@ export function LayersPanel() {
   const toggleVisible = useStore((state) => state.toggleLayerVisible);
   const toggleLocked = useStore((state) => state.toggleLayerLocked);
   const addLayer = useStore((state) => state.addLayer);
+  const duplicateLayer = useStore((state) => state.duplicateLayer);
+  const mergeLayerDown = useStore((state) => state.mergeLayerDown);
+  const selectLayer = useStore((state) => state.selectLayer);
 
   return (
-    <div className="panel pointer-events-auto flex w-56 flex-col gap-1 p-2">
+    <div className="panel pointer-events-auto flex w-72 flex-col gap-1 p-2">
       <div className="flex items-center justify-between px-1 pb-1">
         <span className="text-[11px] uppercase tracking-wide text-muted">Layers</span>
         <button
@@ -24,7 +35,7 @@ export function LayersPanel() {
         </button>
       </div>
 
-      {layers.map((layer) => {
+      {layers.map((layer, index) => {
         const active = layer.id === activeLayerId;
         return (
           <div
@@ -39,9 +50,10 @@ export function LayersPanel() {
             <button
               type="button"
               onClick={() => setActiveLayer(layer.id)}
+              onDoubleClick={() => selectLayer(layer.id)}
               className="min-w-0 flex-1 truncate px-1 text-left text-sm"
               style={{ color: active ? 'var(--color-accent)' : 'var(--color-secondary)' }}
-              title={`Draw on ${layer.name}`}
+              title={`Draw on ${layer.name} — double-click to select its contents`}
             >
               {layer.name}
             </button>
@@ -64,6 +76,31 @@ export function LayersPanel() {
               aria-label={layer.locked ? 'Unlock layer' : 'Lock layer'}
             >
               {layer.locked ? <LockIcon /> : <UnlockIcon />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => duplicateLayer(layer.id)}
+              className="rounded p-1 text-muted transition-colors hover:bg-line/60 hover:text-primary"
+              title={`Duplicate ${layer.name}`}
+              aria-label={`Duplicate ${layer.name}`}
+            >
+              <CopyIcon />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => mergeLayerDown(layer.id)}
+              disabled={index === 0}
+              className="rounded p-1 text-muted transition-colors hover:bg-line/60 hover:text-primary disabled:opacity-25"
+              title={
+                index === 0
+                  ? 'Nothing below to merge into'
+                  : `Merge ${layer.name} into ${layers[index - 1]?.name ?? 'the layer below'}`
+              }
+              aria-label={`Merge ${layer.name} down`}
+            >
+              <MergeDownIcon />
             </button>
           </div>
         );

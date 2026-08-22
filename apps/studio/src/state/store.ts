@@ -1,8 +1,15 @@
 import { create } from 'zustand';
 import {
   AddLayerCommand,
-  DEFAULT_STROKE_STYLE,
+  AddNodesCommand,
+  DeleteNodesCommand,
+  DuplicateLayerCommand,
+  MergeLayersCommand,
+  MoveNodesToLayerCommand,
+  ReplaceNodesCommand,
+  cloneNodes,
   createId,
+  isSolid,
   History,
   InlineOpRunner,
   RenameDocumentCommand,
@@ -13,6 +20,7 @@ import {
   deserializeDocument,
   NO_MIRROR,
   type Command,
+  type SceneNode,
   type Layer,
   type MirrorAxes,
   type OpRunner,
@@ -26,7 +34,8 @@ import { AutoSaver, readLastOpened, rememberLastOpened, type SaveState } from '.
 import { getProjectStore, type ProjectMeta } from '../storage/projectStore.js';
 import { downloadDocument, pickDocumentFile, readDocumentFile } from '../storage/files.js';
 import { pickImageFile, readImageAsDataUrl } from '../storage/images.js';
-import { DEFAULT_BRUSH_ID, findBrush } from '../tools/brushes.js';
+import { DEFAULT_BRUSH_ID, findBrush, styleForBrush } from '../tools/brushes.js';
+import { BOOLEAN_LABELS, evaluateBoolean, type BooleanOp } from '../tools/booleans.js';
 import {
   SCENE_THEMES,
   applyTheme,
@@ -37,7 +46,7 @@ import {
   type ThemePreference,
 } from './theme.js';
 
-export type ToolId = 'draw' | 'erase' | 'plane';
+export type ToolId = 'draw' | 'erase' | 'plane' | 'select';
 
 /**
  * A tracing image floating over the canvas.
@@ -126,6 +135,13 @@ interface AppState {
   recentColors: string[];
   reference: ReferenceImage | null;
 
+  /** Ids of selected nodes. An array, so React sees a new identity on change. */
+  selection: string[];
+  /** Detached copies, so editing the originals afterwards cannot affect a paste. */
+  clipboard: SceneNode[];
+  /** Live rubber-band rectangle in CSS pixels, or null when not dragging. */
+  marquee: { x0: number; y0: number; x1: number; y1: number } | null;
+
   setTool: (tool: ToolId) => void;
   setStyle: (patch: Partial<StrokeStyle>) => void;
   setPlaneMode: (mode: PlaneMode) => void;
@@ -146,6 +162,21 @@ interface AppState {
 
   renameProject: (id: string, name: string) => Promise<void>;
   duplicateProject: (id: string) => Promise<void>;
+
+  setSelection: (ids: string[]) => void;
+  setMarquee: (rect: { x0: number; y0: number; x1: number; y1: number } | null) => void;
+  toggleSelected: (id: string, additive: boolean) => void;
+  clearSelection: () => void;
+  selectLayer: (layerId: string) => void;
+  deleteSelection: () => void;
+  copySelection: () => void;
+  cutSelection: () => void;
+  paste: () => void;
+  moveSelectionToLayer: (layerId: string) => void;
+  applyBoolean: (op: BooleanOp) => void;
+
+  mergeLayerDown: (layerId: string) => void;
+  duplicateLayer: (layerId: string) => void;
 
   run: (command: Command) => void;
   undo: () => void;
@@ -173,11 +204,10 @@ export const useStore = create<AppState>((set, get) => ({
   tool: 'draw',
   // Start on a real preset, so the brush control does not open on "Custom",
   // and on a stroke colour that is visible against the resolved theme.
-  style: {
-    ...DEFAULT_STROKE_STYLE,
-    ...findBrush(DEFAULT_BRUSH_ID).shape,
-    color: SCENE_THEMES[resolveTheme(readThemePreference())].defaultStroke,
-  },
+  style: styleForBrush(
+    DEFAULT_BRUSH_ID,
+    SCENE_THEMES[resolveTheme(readThemePreference())].defaultStroke,
+  ),
   plane: { ...DEFAULT_PLANE_STATE },
   touchIntent: 'camera',
   showPlaneIndicator: true,
@@ -204,6 +234,9 @@ export const useStore = create<AppState>((set, get) => ({
   resolvedTheme: resolveTheme(readThemePreference()),
   recentColors: [],
   reference: null,
+  selection: [],
+  clipboard: [],
+  marquee: null,
 
   setTool: (tool) => set({ tool }),
   setStyle: (patch) =>
@@ -358,6 +391,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => ({
       plane: { ...DEFAULT_PLANE_STATE },
       documentEpoch: state.documentEpoch + 1,
+      selection: [],
       // Starting a sketch means you want to draw, so get the browser out of
       // the way rather than leaving it covering the canvas.
       projectsOpen: false,
@@ -386,6 +420,7 @@ export const useStore = create<AppState>((set, get) => ({
       set((state) => ({
         plane: { ...DEFAULT_PLANE_STATE },
         documentEpoch: state.documentEpoch + 1,
+        selection: [],
         projectsOpen: false,
         saveState: 'saved',
       }));
@@ -534,6 +569,130 @@ export const useStore = create<AppState>((set, get) => ({
     );
     await get().refreshProjects();
     set({ statusMessage: `Duplicated ${meta.name}` });
+  },
+
+  setSelection: (ids) => set({ selection: ids }),
+
+  setMarquee: (marquee) => set({ marquee }),
+
+  toggleSelected: (id, additive) =>
+    set((state) => {
+      if (!additive) {
+        // Tapping the only selected item again clears, which is how every
+        // other canvas app behaves.
+        return { selection: state.selection.length === 1 && state.selection[0] === id ? [] : [id] };
+      }
+      return state.selection.includes(id)
+        ? { selection: state.selection.filter((existing) => existing !== id) }
+        : { selection: [...state.selection, id] };
+    }),
+
+  clearSelection: () => set({ selection: [] }),
+
+  selectLayer: (layerId) =>
+    set({
+      selection: session.document.order.filter(
+        (id) => session.document.nodes.get(id)?.layerId === layerId,
+      ),
+    }),
+
+  deleteSelection: () => {
+    const { selection } = get();
+    if (selection.length === 0) return;
+    get().run(new DeleteNodesCommand([...selection], `Delete ${selection.length}`));
+    set({ selection: [] });
+  },
+
+  copySelection: () => {
+    const nodes = get()
+      .selection.map((id) => session.document.nodes.get(id))
+      .filter((node): node is SceneNode => node !== undefined);
+    if (nodes.length === 0) return;
+
+    // Cloned at copy time so later edits to the originals cannot leak in.
+    set({
+      clipboard: cloneNodes(nodes),
+      statusMessage: `Copied ${nodes.length} item${nodes.length === 1 ? '' : 's'}`,
+    });
+  },
+
+  cutSelection: () => {
+    get().copySelection();
+    get().deleteSelection();
+  },
+
+  paste: () => {
+    const { clipboard, activeLayerId } = get();
+    if (clipboard.length === 0) return;
+
+    // Cloned again on paste, so pasting twice gives two independent copies.
+    const nodes = cloneNodes(clipboard, activeLayerId);
+    get().run(new AddNodesCommand(nodes, `Paste ${nodes.length}`));
+    set({
+      selection: nodes.map((node) => node.id),
+      statusMessage: `Pasted into ${session.document.layers.find((l) => l.id === activeLayerId)?.name ?? 'layer'}`,
+    });
+  },
+
+  moveSelectionToLayer: (layerId) => {
+    const { selection } = get();
+    if (selection.length === 0) return;
+    get().run(new MoveNodesToLayerCommand([...selection], layerId));
+  },
+
+  applyBoolean: (op) => {
+    const state = get();
+    const nodes = state.selection
+      .map((id) => session.document.nodes.get(id))
+      .filter((node): node is SceneNode => node !== undefined && isSolid(node));
+
+    if (nodes.length < 2) {
+      set({ statusMessage: 'Select at least two strokes first.' });
+      return;
+    }
+
+    try {
+      const result = evaluateBoolean(nodes, op, state.activeLayerId, nodes[0]!.style);
+      state.run(
+        new ReplaceNodesCommand(
+          nodes.map((node) => node.id),
+          [result],
+          BOOLEAN_LABELS[op],
+        ),
+      );
+      set({ selection: [result.id], statusMessage: `${BOOLEAN_LABELS[op]} complete` });
+    } catch (error) {
+      set({ statusMessage: describeError(error, 'That operation could not be completed.') });
+    }
+  },
+
+  mergeLayerDown: (layerId) => {
+    const doc = session.document;
+    const index = doc.layers.findIndex((layer) => layer.id === layerId);
+    // "Down" means the layer before it in the list, which is drawn earlier.
+    const target = doc.layers[index - 1];
+    if (index <= 0 || !target) {
+      set({ statusMessage: 'There is no layer below this one.' });
+      return;
+    }
+    get().run(new MergeLayersCommand([layerId], target.id));
+  },
+
+  duplicateLayer: (layerId) => {
+    const doc = session.document;
+    const index = doc.layers.findIndex((layer) => layer.id === layerId);
+    const source = doc.layers[index];
+    if (!source) return;
+
+    const copy = { ...createLayer(`${source.name} copy`), visible: source.visible, opacity: source.opacity };
+    const nodes = cloneNodes(
+      doc.order
+        .map((id) => doc.nodes.get(id))
+        .filter((node): node is SceneNode => node?.layerId === layerId),
+      copy.id,
+    );
+
+    get().run(new DuplicateLayerCommand(copy, nodes, index + 1));
   },
 
   saveNow: async () => {

@@ -65,7 +65,32 @@ export interface MeshNode {
   createdAt: number;
 }
 
-export type SceneNode = StrokeNode | MeshNode;
+/**
+ * Geometry with no procedural description left — the result of a boolean
+ * operation, where the surface no longer corresponds to any centreline.
+ *
+ * A stroke can be re-swept at a different width because its centreline is
+ * kept; once two strokes are cut against each other there is no centreline to
+ * re-sweep, so the triangles themselves become the source of truth.
+ */
+export interface BakedMeshNode {
+  id: NodeId;
+  type: 'baked';
+  layerId: LayerId;
+  /** Shown in the UI, e.g. "Subtract of 2". */
+  label: string;
+  positions: Float32Array;
+  normals: Float32Array;
+  indices: Uint32Array;
+  style: StrokeStyle;
+  createdAt: number;
+}
+
+export type SceneNode = StrokeNode | MeshNode | BakedMeshNode;
+
+/** True for nodes that can take part in a boolean operation. */
+export const isSolid = (node: SceneNode): node is StrokeNode | BakedMeshNode =>
+  node.type === 'stroke' || node.type === 'baked';
 
 export interface Layer {
   id: LayerId;

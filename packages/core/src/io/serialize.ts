@@ -1,5 +1,6 @@
 import {
   DEFAULT_STROKE_STYLE,
+  type BakedMeshNode,
   type Layer,
   type MeshNode,
   type SceneNode,
@@ -15,6 +16,7 @@ import {
   WISP_MAGIC,
   WispFormatError,
   align4,
+  type BakedManifestNode,
   type ManifestNode,
   type StrokeManifestNode,
   type WispManifest,
@@ -25,6 +27,7 @@ const HEADER_BYTES = 12;
 /** Encodes a document into a `.wisp` buffer. */
 export function serializeDocument(doc: SketchDocument): ArrayBuffer {
   const strokes: StrokeNode[] = [];
+  const baked: BakedMeshNode[] = [];
   const nodes: ManifestNode[] = [];
 
   // First pass: lay out the binary section and build the manifest.
@@ -33,7 +36,32 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
     const node = doc.nodes.get(id);
     if (!node) continue;
 
-    if (node.type === 'stroke') {
+    if (node.type === 'baked') {
+      const vertexCount = node.positions.length / 3;
+      const positionsOffset = binaryBytes;
+      const normalsOffset = positionsOffset + node.positions.byteLength;
+      const indicesOffset = normalsOffset + node.normals.byteLength;
+
+      nodes.push({
+        id: node.id,
+        type: 'baked',
+        layerId: node.layerId,
+        createdAt: node.createdAt,
+        label: node.label,
+        style: { ...node.style },
+        geometry: {
+          vertexCount,
+          positionsOffset,
+          normalsOffset,
+          indexCount: node.indices.length,
+          indicesOffset,
+        },
+      });
+      baked.push(node);
+      // Every buffer here is a multiple of 4 bytes wide, so the section stays
+      // aligned without padding between entries.
+      binaryBytes = indicesOffset + node.indices.byteLength;
+    } else if (node.type === 'stroke') {
       nodes.push({
         id: node.id,
         type: 'stroke',
@@ -90,14 +118,33 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
   const binaryStart = HEADER_BYTES + manifestPadded;
   const floats = new Float32Array(buffer, binaryStart, binaryBytes / 4);
 
-  let f = 0;
-  for (const stroke of strokes) {
+  // Strokes and baked meshes share the binary section; each manifest entry
+  // carries its own offset, so writing them in separate passes is safe.
+  for (const entry of nodes) {
+    if (entry.type !== 'stroke') continue;
+    const stroke = strokes.find((candidate) => candidate.id === entry.id);
+    if (!stroke) continue;
+
+    let f = entry.samples.byteOffset / 4;
     for (const sample of stroke.samples) {
       floats[f++] = sample.position.x;
       floats[f++] = sample.position.y;
       floats[f++] = sample.position.z;
       floats[f++] = sample.pressure;
     }
+  }
+
+  for (const entry of nodes) {
+    if (entry.type !== 'baked') continue;
+    const node = baked.find((candidate) => candidate.id === entry.id);
+    if (!node) continue;
+
+    const { positionsOffset, normalsOffset, indicesOffset } = entry.geometry;
+    new Float32Array(buffer, binaryStart + positionsOffset, node.positions.length).set(
+      node.positions,
+    );
+    new Float32Array(buffer, binaryStart + normalsOffset, node.normals.length).set(node.normals);
+    new Uint32Array(buffer, binaryStart + indicesOffset, node.indices.length).set(node.indices);
   }
 
   return buffer;
@@ -155,7 +202,9 @@ export function deserializeDocument(buffer: ArrayBuffer): SketchDocument {
     const node =
       entry.type === 'stroke'
         ? readStroke(entry, buffer, binaryStart, binaryBytes)
-        : readMesh(entry);
+        : entry.type === 'baked'
+          ? readBaked(entry, buffer, binaryStart, binaryBytes)
+          : readMesh(entry);
 
     if (!node) continue;
     nodes.set(node.id, node);
@@ -231,6 +280,59 @@ function readStroke(
     samples,
     style: readStyle(entry.style),
     planeNormal: readVec3(entry.planeNormal, vec3(0, 1, 0)),
+    createdAt: Number(entry.createdAt) || Date.now(),
+  };
+}
+
+function readBaked(
+  entry: BakedManifestNode,
+  buffer: ArrayBuffer,
+  binaryStart: number,
+  binaryBytes: number,
+): BakedMeshNode | null {
+  const range = entry.geometry;
+  if (!range || range.vertexCount <= 0 || range.indexCount <= 0) return null;
+
+  const floatBytes = range.vertexCount * 3 * 4;
+  const indexBytes = range.indexCount * 4;
+
+  const fits = (offset: number, length: number): boolean =>
+    offset >= 0 && offset + length <= binaryBytes;
+
+  if (
+    !fits(range.positionsOffset, floatBytes) ||
+    !fits(range.normalsOffset, floatBytes) ||
+    !fits(range.indicesOffset, indexBytes)
+  ) {
+    throw new WispFormatError(`Mesh "${entry.id}" points outside the file.`);
+  }
+
+  // Copied out of the file buffer rather than viewed into it, so the document
+  // does not pin the whole file in memory for the life of the sketch.
+  return {
+    id: entry.id,
+    type: 'baked',
+    layerId: entry.layerId,
+    label: typeof entry.label === 'string' ? entry.label : 'Mesh',
+    positions: new Float32Array(
+      buffer.slice(
+        binaryStart + range.positionsOffset,
+        binaryStart + range.positionsOffset + floatBytes,
+      ),
+    ),
+    normals: new Float32Array(
+      buffer.slice(
+        binaryStart + range.normalsOffset,
+        binaryStart + range.normalsOffset + floatBytes,
+      ),
+    ),
+    indices: new Uint32Array(
+      buffer.slice(
+        binaryStart + range.indicesOffset,
+        binaryStart + range.indicesOffset + indexBytes,
+      ),
+    ),
+    style: readStyle(entry.style),
     createdAt: Number(entry.createdAt) || Date.now(),
   };
 }

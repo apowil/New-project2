@@ -17,6 +17,8 @@ export class ToolController implements GestureHandlers {
     this.draw = new DrawTool(viewport);
   }
 
+  private marqueeStart: { x: number; y: number; additive: boolean } | null = null;
+
   onStrokeStart = (input: StrokeInput): void => {
     const { tool } = useStore.getState();
 
@@ -30,26 +32,67 @@ export class ToolController implements GestureHandlers {
       case 'plane':
         this.replantPlaneAt(input);
         break;
+      case 'select':
+        this.marqueeStart = { x: input.x, y: input.y, additive: input.shiftKey };
+        break;
     }
   };
 
   onStrokeMove = (inputs: StrokeInput[]): void => {
     const { tool } = useStore.getState();
+    const last = inputs[inputs.length - 1];
+
     if (tool === 'draw') {
       this.draw.extend(inputs);
     } else if (tool === 'erase') {
       // Dragging the eraser keeps deleting whatever it passes over.
-      const last = inputs[inputs.length - 1];
       if (last) this.eraseAt(last);
+    } else if (tool === 'select' && this.marqueeStart && last) {
+      // Only show the rubber band once the drag is clearly not a tap.
+      const dragged =
+        Math.abs(last.x - this.marqueeStart.x) + Math.abs(last.y - this.marqueeStart.y) > 6;
+      useStore.getState().setMarquee(
+        dragged
+          ? { x0: this.marqueeStart.x, y0: this.marqueeStart.y, x1: last.x, y1: last.y }
+          : null,
+      );
     }
   };
 
-  onStrokeEnd = (): void => {
-    if (useStore.getState().tool === 'draw') void this.draw.end();
+  onStrokeEnd = (input: StrokeInput): void => {
+    const store = useStore.getState();
+
+    if (store.tool === 'draw') {
+      void this.draw.end();
+      return;
+    }
+
+    if (store.tool === 'select' && this.marqueeStart) {
+      const start = this.marqueeStart;
+      this.marqueeStart = null;
+      store.setMarquee(null);
+
+      const travelled = Math.abs(input.x - start.x) + Math.abs(input.y - start.y);
+      const additive = start.additive || input.shiftKey;
+
+      if (travelled > 6) {
+        const ids = this.viewport.nodesInRect(start.x, start.y, input.x, input.y);
+        store.setSelection(
+          additive ? [...new Set([...store.selection, ...ids])] : ids,
+        );
+        return;
+      }
+
+      const hit = this.viewport.pickSurface(input.x, input.y);
+      if (hit?.nodeId) store.toggleSelected(hit.nodeId, additive);
+      else if (!additive) store.clearSelection();
+    }
   };
 
   onStrokeCancel = (): void => {
     this.draw.cancel();
+    this.marqueeStart = null;
+    useStore.getState().setMarquee(null);
   };
 
   onHover = (): void => {

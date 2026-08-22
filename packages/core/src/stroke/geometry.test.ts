@@ -145,3 +145,56 @@ describe('buildStrokeGeometry', () => {
     expect(radiusAt(hard, 10)).toBeGreaterThan(radiusAt(soft, 10));
   });
 });
+
+describe('winding', () => {
+  /**
+   * Positive signed volume means the triangles wind counter-clockwise seen
+   * from outside — the convention every mesh consumer assumes. Renderers get
+   * away without it here because normals are supplied explicitly, so nothing
+   * on screen would reveal a regression; CSG and mesh export would silently
+   * produce inside-out results instead.
+   */
+  const signedVolume = (geometry: NonNullable<ReturnType<typeof buildStrokeGeometry>>): number => {
+    const { positions, indices } = geometry;
+    let volume = 0;
+
+    for (let i = 0; i < indices.length; i += 3) {
+      const a = indices[i]! * 3;
+      const b = indices[i + 1]! * 3;
+      const c = indices[i + 2]! * 3;
+
+      const ax = positions[a]!, ay = positions[a + 1]!, az = positions[a + 2]!;
+      const bx = positions[b]!, by = positions[b + 1]!, bz = positions[b + 2]!;
+      const cx = positions[c]!, cy = positions[c + 1]!, cz = positions[c + 2]!;
+
+      volume +=
+        (ax * (by * cz - bz * cy) -
+          ay * (bx * cz - bz * cx) +
+          az * (bx * cy - by * cx)) / 6;
+    }
+    return volume;
+  };
+
+  it('winds outward, so the solid has positive volume', () => {
+    const samples = Array.from({ length: 30 }, (_, i) => ({
+      position: vec3(-1 + (2 * i) / 29, 0, 0),
+      pressure: 1,
+    }));
+    const geometry = buildStrokeGeometry(samples, {
+      width: 0.4,
+      sides: 12,
+      flatness: 1,
+      taper: 0,
+      minPressureScale: 1,
+    })!;
+
+    // A 2-long tube of radius 0.2 encloses about pi * 0.04 * 2 = 0.25.
+    const volume = signedVolume(geometry);
+    expect(volume).toBeGreaterThan(0);
+    expect(volume).toBeCloseTo(0.25, 1);
+  });
+
+  it('stays outward on a curved stroke', () => {
+    expect(signedVolume(buildStrokeGeometry(wave(80), { sides: 10 })!)).toBeGreaterThan(0);
+  });
+});

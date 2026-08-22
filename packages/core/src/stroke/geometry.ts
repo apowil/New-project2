@@ -258,27 +258,32 @@ export function buildStrokeGeometry(
       const c = (i + 1) * sides + jNext;
       const d = (i + 1) * sides + j;
 
+      // Counter-clockwise seen from outside, so the solid's signed volume is
+      // positive. Renderers tolerate the reverse because the normals are
+      // supplied explicitly, but anything that reasons about inside versus
+      // outside — CSG, mesh export, 3D printing — does not.
       indices[w++] = a;
-      indices[w++] = bIdx;
       indices[w++] = c;
+      indices[w++] = bIdx;
 
       indices[w++] = a;
-      indices[w++] = c;
       indices[w++] = d;
+      indices[w++] = c;
     }
   }
 
   for (let j = 0; j < sides; j += 1) {
     const jNext = (j + 1) % sides;
-    // Start cap winds the opposite way so it faces outward.
+    // The start cap faces backwards along the stroke, so it winds opposite to
+    // the end cap.
     indices[w++] = startIndex;
-    indices[w++] = jNext;
     indices[w++] = j;
+    indices[w++] = jNext;
 
     const base = (count - 1) * sides;
     indices[w++] = endIndex;
-    indices[w++] = base + j;
     indices[w++] = base + jNext;
+    indices[w++] = base + j;
   }
 
   return { positions, normals: normalsOut, uvs, indices };

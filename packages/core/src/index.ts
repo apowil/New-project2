@@ -31,6 +31,7 @@ export {
 export * from './document/types.js';
 export * from './document/document.js';
 export { createId } from './document/ids.js';
+export { cloneNode, cloneNodes } from './document/clone.js';
 
 export { History, type Command, type HistoryState } from './history/history.js';
 export * from './history/commands.js';

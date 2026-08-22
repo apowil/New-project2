@@ -29,6 +29,8 @@ export interface StrokeInput {
   tiltY: number;
   timestamp: number;
   pointerType: string;
+  /** Held modifier, so a desktop user can add to a selection. */
+  shiftKey: boolean;
 }
 
 export interface GestureHandlers {
@@ -150,6 +152,7 @@ export class InputRouter {
       tiltY: event.tiltY ?? 0,
       timestamp: event.timeStamp,
       pointerType: event.pointerType,
+      shiftKey: event.shiftKey,
     };
   }
 

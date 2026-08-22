@@ -1,8 +1,9 @@
 import { useStore, type ToolId } from '../state/store.js';
-import { EraserIcon, PenIcon, PlaneIcon } from './Icons.js';
+import { CursorIcon, EraserIcon, PenIcon, PlaneIcon } from './Icons.js';
 
 const TOOLS: Array<{ id: ToolId; label: string; hint: string; Icon: typeof PenIcon }> = [
   { id: 'draw', label: 'Draw', hint: 'D', Icon: PenIcon },
+  { id: 'select', label: 'Select', hint: 'S', Icon: CursorIcon },
   { id: 'erase', label: 'Erase', hint: 'E', Icon: EraserIcon },
   { id: 'plane', label: 'Place sketch plane', hint: 'P', Icon: PlaneIcon },
 ];

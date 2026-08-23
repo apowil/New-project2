@@ -14,6 +14,7 @@ import { type GestureHandlers, type StrokeInput } from '../viewport/gestures.js'
 import { type Viewport } from '../viewport/viewport.js';
 import { session, useStore } from '../state/store.js';
 import { DrawTool } from './drawTool.js';
+import { DimensionTool } from './dimensionTool.js';
 import { ShapeTool } from './shapeTool.js';
 import { TextTool } from './textTool.js';
 import { resolvePlane } from '../viewport/sketchPlane.js';
@@ -26,11 +27,13 @@ export class ToolController implements GestureHandlers {
   readonly draw: DrawTool;
   readonly shape: ShapeTool;
   readonly text: TextTool;
+  readonly dimension: DimensionTool;
 
   constructor(private readonly viewport: Viewport) {
     this.draw = new DrawTool(viewport);
     this.shape = new ShapeTool(viewport);
     this.text = new TextTool(viewport);
+    this.dimension = new DimensionTool(viewport);
   }
 
   private marqueeStart: { x: number; y: number; additive: boolean } | null = null;
@@ -64,6 +67,10 @@ export class ToolController implements GestureHandlers {
         break;
       case 'shape':
         this.shape.begin(input);
+        break;
+      case 'dimension':
+        // Taps, not a drag: a dimension is three separate decisions.
+        this.dimension.tap(input);
         break;
       case 'text':
         // The prompt takes over from here; the tool only marks the spot.
@@ -161,6 +168,7 @@ export class ToolController implements GestureHandlers {
   onStrokeCancel = (): void => {
     this.draw.cancel();
     this.shape.cancel();
+    this.dimension.cancel();
     this.marqueeStart = null;
     if (this.moveState) this.endMove();
     useStore.getState().setMarquee(null);
@@ -255,7 +263,9 @@ export class ToolController implements GestureHandlers {
 
   onHover = (input: StrokeInput | null): void => {
     // A chained polyline previews its next segment as the pen hovers.
-    if (input && useStore.getState().tool === 'shape') this.shape.hover(input);
+    const hovering = useStore.getState().tool;
+    if (input && hovering === 'shape') this.shape.hover(input);
+    if (input && hovering === 'dimension') this.dimension.hover(input);
   };
 
   onCameraChange = (): void => {

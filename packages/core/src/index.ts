@@ -33,6 +33,7 @@ export {
 
 export * from './shapes/shapes.js';
 export { buildTextPolylines, measureText, type TextParams } from './shapes/text.js';
+export { buildDimension, type DimensionParts } from './shapes/dimension.js';
 export { ADVANCE, LINE_HEIGHT, glyphFor, hasGlyph, type Glyph } from './shapes/font.js';
 
 export * from './document/types.js';

@@ -16,6 +16,8 @@ const HINTS: Record<string, string> = {
   select: 'Tap to select · drag a box for several · drag a selected item to move it',
   erase: 'Tap or drag across a stroke to remove it',
   plane: 'Tap any surface to plant the sketch plane on it',
+  shape: 'Drag to draw · shift for a square or 45° · alt from the centre',
+  dimension: 'Tap two points to measure, then tap where the line should sit',
 };
 
 export function HintBar() {

@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { buildDimension, nodesBounds, nodesCentre } from '@wisp/core';
+
 import { App } from './App.js';
 import { session, useStore } from './state/store.js';
 import { initTheme } from './state/theme.js';
@@ -13,13 +15,18 @@ initTheme();
  * Debug handle. End-to-end tests drive the app through real pointer events and
  * then assert against the document here, rather than reaching into React
  * internals. Handy in the browser console too.
+ *
+ * A few pure helpers come along so a test can measure what it is looking at
+ * without reimplementing the maths and then agreeing with its own mistake.
  */
+const core = { nodesBounds, nodesCentre, buildDimension };
+
 declare global {
   interface Window {
-    __wisp: { session: typeof session; store: typeof useStore };
+    __wisp: { session: typeof session; store: typeof useStore; core: typeof core };
   }
 }
-window.__wisp = { session, store: useStore };
+window.__wisp = { session, store: useStore, core };
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Root container missing from index.html');

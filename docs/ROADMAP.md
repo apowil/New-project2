@@ -129,6 +129,38 @@ stroke samples, and its version went to 2.
   and SVG re-rendered through Three's SVGRenderer as genuine vector polygons
   rather than a traced bitmap.
 
+## Stage 2.3 — Editing what is already there ✅
+
+From an audit of the app against what it was missing. The theme is that
+almost everything could be *made* and almost nothing could be *changed*.
+
+- **Restyle** — `SetStyleCommand` had been written, tested and never called,
+  so nothing could change a stroke after it was drawn. Style edits now apply
+  to the selection, merging into one undo step while a slider moves.
+- **Transforms** — rotate, scale, mirror and place a selection about its own
+  centre. All four are one affine type sharing one path through the document,
+  which is what keeps the awkward parts consistent: normals need the inverse
+  transpose under a non-uniform scale, and a mirror has to reverse triangle
+  winding or the surface turns inside out. Undo stores the inverse rather than
+  a copy of the geometry.
+- **Exact steps rather than a gizmo.** A handle is quicker for a rough nudge,
+  but the reason to open the transform menu is usually that ninety degrees or
+  half size is wanted *exactly*. A joystick widget is still worth adding
+  alongside it.
+- **Object outliner** — layers expand to show their contents; each object can
+  be named, hidden and locked on its own. Layers can be reordered, though that
+  orders the panel rather than the picture: in 3D the depth buffer decides
+  what is in front.
+- **Groups** — a reversible "keep these together", offered next to the
+  booleans because it answers the same question without baking.
+- **Dimensions** — measure between two points and leave the measurement
+  behind. Stored as the two points, so the number follows the unit setting
+  instead of being frozen at whatever was current when it was drawn.
+- **Shape constraints** — shift for a square or 45°, alt from the centre.
+- **Eyedropper**, **duplicate in place**, **export the selection only**,
+  **library search and sort**, and a **lowercase alphabet** with real
+  ascenders and descenders rather than small capitals.
+
 ---
 
 ## Still to build
@@ -138,8 +170,9 @@ stroke samples, and its version went to 2.
 - Primitives: box, sphere, cylinder, cone, ring — **as drawing surfaces**, not
   just objects. Feather's approach is to draw *onto* a primitive, which pairs
   with the surface-anchored sketch plane already built.
-- Rotate and scale a selection. Feather uses a **joystick-style** widget rather
-  than three thin axis arrows — far easier to hit with a finger.
+- A **joystick-style** transform widget in the scene, to sit alongside the
+  exact steps that exist now — far easier to hit with a finger for a rough
+  adjustment.
 - Snapping to vertices, edges, midpoints, faces and the ground
 - Partial eraser — split a stroke instead of deleting the whole thing
 
@@ -211,15 +244,19 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
 ## Known gaps right now
 
 - A stroke's shape cannot be edited after it is drawn — it can be moved,
-  combined and deleted, but not reshaped (liquify, stage 2.5)
-- Selection moves but does not rotate or scale yet
+  transformed, restyled, combined and deleted, but its centreline cannot be
+  pushed around (liquify, stage 2.5)
+- Transforms are exact steps from a menu; there is no drag handle in the scene
+- Scaling a stroke drops its editable dimensions, because the stored numbers
+  would no longer describe it. Rotation and movement keep them.
 - No 3D model export yet — PNG, JPEG and SVG work, but glTF, OBJ and STL do
   not (stage 4)
 - SVG export is flat-shaded polygons, one per triangle: true vector, but large
   for a dense sketch and without the lighting of the WebGL view
-- The stroke font is capitals only, and shapes mirrored by symmetry lose their
-  editable dimensions, since reflected parameters would need a reflected plane
-  to stay honest
+- Shapes mirrored by symmetry lose their editable dimensions, since reflected
+  parameters would need a reflected plane to stay honest
+- The stroke font covers ASCII letters, digits and a little punctuation;
+  accented characters fall back to the unaccented capital
 - Booleans run on the main thread; a very dense selection will pause the UI
   for a moment. This is the first operation that should move to the compute
   link in stage 5.

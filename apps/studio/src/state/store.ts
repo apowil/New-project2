@@ -72,7 +72,7 @@ import {
 } from './theme.js';
 import { readUnit, writeUnit } from './unitPreference.js';
 
-export type ToolId = 'draw' | 'erase' | 'plane' | 'select' | 'shape' | 'text';
+export type ToolId = 'draw' | 'erase' | 'plane' | 'select' | 'shape' | 'text' | 'dimension';
 
 /**
  * A tracing image floating over the canvas.
@@ -149,6 +149,7 @@ export interface ViewActions {
   frameAll: () => void;
   renderImage: (format: 'png' | 'jpg', scale: number) => string;
   renderSvg: () => Promise<string>;
+  setUnit: (unit: Unit) => void;
 }
 
 let viewActions: ViewActions | null = null;
@@ -448,6 +449,9 @@ export const useStore = create<AppState>((set, get) => ({
   setUnit: (unit) => {
     writeUnit(unit);
     set({ unit });
+    // Dimensions carry points, not text, so their labels have to be rebuilt at
+    // the new unit — no geometry moved, so nothing else would notice.
+    getViewActions()?.setUnit(unit);
   },
 
   exportImage: async (format, scale = 2) => {
@@ -655,7 +659,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   setProjectsOpen: (projectsOpen) => {
     set({ projectsOpen });
-    if (projectsOpen) void get().refreshProjects();
+    // Saving is debounced, so a sketch renamed a moment ago has not reached
+    // storage yet. Flushing first means the library shows what is actually on
+    // the device rather than the state of things a second and a half ago.
+    if (projectsOpen) void autoSaver.flush().then(() => get().refreshProjects());
   },
 
   setLibrarySearch: (librarySearch) => set({ librarySearch }),

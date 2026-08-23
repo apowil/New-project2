@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import {
+  buildDimension,
   buildStrokeGeometry,
   visibleNodes,
+  type AnnotationNode,
   type BakedMeshNode,
   type SketchDocument,
   type StrokeGeometry,
   type StrokeNode,
   type StrokeStyle,
+  type Unit,
   type Vec3,
 } from '@wisp/core';
 
@@ -15,6 +18,7 @@ import { SCENE_THEMES, type ResolvedTheme, type SceneTheme } from '../state/them
 import { OrbitCamera } from './camera.js';
 import { PlaneIndicator } from './sketchPlane.js';
 import { applyStyle, makeStrokeMaterial, toBufferGeometry } from './strokeMesh.js';
+import { sweepPolylines } from './sweep.js';
 
 /** The parts of a style that change the swept surface rather than its shading. */
 export const geometryOptions = (style: StrokeStyle) => ({
@@ -34,6 +38,11 @@ interface StrokeEntry {
   styleRef: unknown;
   layerOpacity: number;
   selected?: boolean;
+  /**
+   * Set only on dimensions: what their generated geometry depends on besides
+   * the points themselves, so a unit change is noticed as readily as a move.
+   */
+  annotationKey?: string;
 }
 
 export interface SurfaceHit {
@@ -70,6 +79,9 @@ export class Viewport {
   private dirty = true;
   private running = false;
   private lastRevision = -1;
+  /** Kept so a unit change can redraw dimensions without waiting for an edit. */
+  private lastDocument: SketchDocument | null = null;
+  private unit: Unit = 'm';
   private resizeObserver: ResizeObserver | null = null;
 
   /** Set by the app so the render loop can advance an in-progress stroke. */
@@ -212,6 +224,7 @@ export class Viewport {
    * a revision check short-circuits, and unchanged strokes keep their meshes.
    */
   syncDocument(doc: SketchDocument, force = false): void {
+    this.lastDocument = doc;
     if (!force && doc.revision === this.lastRevision) return;
     this.lastRevision = doc.revision;
 
@@ -225,6 +238,9 @@ export class Viewport {
       } else if (node.type === 'baked') {
         seen.add(node.id);
         this.syncBaked(node, layerOpacity.get(node.layerId) ?? 1);
+      } else if (node.type === 'annotation') {
+        seen.add(node.id);
+        this.syncAnnotation(node, layerOpacity.get(node.layerId) ?? 1);
       }
       // 'mesh' primitives arrive in stage 2.
     }
@@ -337,6 +353,89 @@ export class Viewport {
     }
 
     return found;
+  }
+
+  /**
+   * The unit dimensions are labelled in.
+   *
+   * Held here because a unit change is not a document change — no geometry
+   * moves — yet every dimension has to be redrawn to say the new number.
+   */
+  setUnit(unit: Unit): void {
+    if (unit === this.unit) return;
+    this.unit = unit;
+
+    // Drop the annotation meshes so the next sync rebuilds their labels.
+    for (const [id, entry] of this.entries) {
+      if (!entry.annotationKey) continue;
+      this.strokeGroup.remove(entry.mesh);
+      entry.mesh.geometry.dispose();
+      entry.material.dispose();
+      this.entries.delete(id);
+    }
+
+    if (this.lastDocument) this.syncDocument(this.lastDocument, true);
+  }
+
+  /**
+   * Dimensions are generated, not stored.
+   *
+   * The node carries two points and an offset; the witness lines, arrows and
+   * the number are built here at the current unit. Rebuilt whenever the points
+   * move or the unit changes, and otherwise left alone.
+   */
+  private syncAnnotation(node: AnnotationNode, layerOpacity: number): void {
+    const key = `${this.unit}|${node.offset}|${node.textSize}`;
+    const existing = this.entries.get(node.id);
+
+    if (existing && existing.annotationKey === key && existing.samplesRef === node.from) {
+      if (existing.styleRef !== node.style || existing.layerOpacity !== layerOpacity) {
+        applyStyle(existing.material, node.style);
+        existing.material.opacity = node.style.opacity * layerOpacity;
+        existing.material.transparent = existing.material.opacity < 1;
+        existing.styleRef = node.style;
+        existing.layerOpacity = layerOpacity;
+      }
+      return;
+    }
+
+    const parts = buildDimension(node, this.unit);
+    // The rules are drawn thinner than the brush would be: a dimension is an
+    // annotation on the drawing, not part of it.
+    const ruleStyle = { ...node.style, width: node.textSize * 0.09, sides: 5 };
+    const geometry = sweepPolylines([...parts.lines, ...parts.text], ruleStyle);
+
+    if (existing) {
+      this.strokeGroup.remove(existing.mesh);
+      existing.mesh.geometry.dispose();
+      existing.material.dispose();
+      this.entries.delete(node.id);
+    }
+    if (!geometry) return;
+
+    const buffer = new THREE.BufferGeometry();
+    buffer.setAttribute('position', new THREE.BufferAttribute(geometry.positions, 3));
+    buffer.setAttribute('normal', new THREE.BufferAttribute(geometry.normals, 3));
+    buffer.setIndex(new THREE.BufferAttribute(geometry.indices, 1));
+    buffer.computeBoundingSphere();
+    buffer.computeBoundingBox();
+
+    const material = makeStrokeMaterial(node.style);
+    material.opacity = node.style.opacity * layerOpacity;
+    material.transparent = material.opacity < 1;
+
+    const mesh = new THREE.Mesh(buffer, material);
+    mesh.userData.nodeId = node.id;
+    this.strokeGroup.add(mesh);
+
+    this.entries.set(node.id, {
+      mesh,
+      material,
+      samplesRef: node.from,
+      styleRef: node.style,
+      layerOpacity,
+      annotationKey: key,
+    });
   }
 
   private syncStroke(node: StrokeNode, layerOpacity: number): void {

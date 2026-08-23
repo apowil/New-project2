@@ -97,9 +97,13 @@ export function App() {
       },
       renderImage: (format, scale) => viewport.renderImage(format, scale),
       renderSvg: () => viewport.renderSvg(),
+      setUnit: (unit) => viewport.setUnit(unit),
     });
     const detachAutoSave = autoSaver.attach();
 
+    // The saved unit is restored before the first sync, so a reopened sketch
+    // never shows its dimensions in metres for a frame first.
+    viewport.setUnit(useStore.getState().unit);
     viewport.syncDocument(session.document, true);
     viewport.start();
 
@@ -257,7 +261,19 @@ export function App() {
           controllerRef.current.finishShape(false);
           return;
         }
+        // Then a half-placed dimension, for the same reason.
+        if (controllerRef.current?.dimension.isActive) {
+          controllerRef.current.dimension.cancel();
+          store.setStatusMessage(null);
+          return;
+        }
         store.clearSelection();
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'd' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        store.duplicateSelection();
         return;
       }
 
@@ -276,6 +292,9 @@ export function App() {
           break;
         case 't':
           store.setTool('text');
+          break;
+        case 'm':
+          store.setTool('dimension');
           break;
         case 'p':
           store.setTool('plane');

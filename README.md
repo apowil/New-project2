@@ -7,7 +7,7 @@ Think [feather.art](https://www.feather.art/), but for Android, and with an
 extra trick: pair the tablet with the Windows app and the heavy operations run
 on the PC while the pen stays immediate and local.
 
-**Sketching core, persistence and symmetry are built.** See
+**Sketching, shapes, editing and persistence are built.** See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what is done and what is next.
 
 ## Try it
@@ -48,15 +48,21 @@ npm run typecheck
 Press and hold with a finger — or middle-click — to re-centre the orbit on
 whatever is under it.
 
-Keys: `D` draw · `S` select · `R` shapes · `T` text · `E` erase · `P` place
-sketch plane · `F` frame
+Keys: `D` draw · `S` select · `R` shapes · `T` text · `M` measure · `E` erase ·
+`P` place sketch plane · `F` frame
 everything · `[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo ·
-`Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut, paste · `Ctrl+A` select the layer ·
-`Del` delete · `Esc` deselect · `Ctrl+S` save · `Ctrl+O` sketches.
+`Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut, paste · `Ctrl+D` duplicate ·
+`Ctrl+A` select the layer · `Del` delete · `Esc` deselect · `Ctrl+S` save ·
+`Ctrl+O` sketches.
 
 With the **select** tool, tap a stroke to pick it, drag a box to catch
 several, and drag something already selected to move it. The actions for a
-selection appear in a small bar just above it.
+selection appear in a small bar just above it — copy, duplicate, transform,
+combine, and exact sizes. Changing a colour or width with something selected
+restyles it rather than only affecting the next stroke.
+
+Drawing a shape, hold **shift** for a square or a 45° line, and **alt** to
+grow it from its centre.
 
 **Sketch planes** are the thing to understand. Strokes land on a plane in
 space. By default that plane faces you, so drawing feels like paper — then you
@@ -71,28 +77,35 @@ it, so you can draw directly onto existing geometry.
 - Undo/redo, layers, eraser
 - Camera-facing / ground / front / side / surface sketch planes
 - Symmetry across X, Y and Z — any combination, up to eight copies at once
-- Select, move, copy, cut and paste — including pasting into another layer
+- Select, move, copy, cut, paste and duplicate — including into another layer
+- Rotate, scale, mirror and place a selection by exact amounts; restyle it
 - Boolean operations: merge, subtract, intersect, and a non-cutting combine
-- Layers: merge down, duplicate with contents, move a selection between them
+- Groups — keep things together reversibly, without baking them
+- Layers: merge down, duplicate with contents, reorder, move a selection
+- An outliner: every object nameable, hideable and lockable on its own
+- Dimensions that measure between two points and follow the unit setting
 - Six brushes: round brush, flat brush, pen, pencil, and water markers
 - Shape tools: line, rectangle, circle, polygon, polyline and spline, with
   live measurements and exact sizes you can type afterwards
-- Text in a single-stroke technical face, drawn with the current brush
+- Text in a single-stroke technical face, upper and lower case
 - Units in mm, cm, m, inches or feet — display only, never the geometry
-- Export to PNG, JPEG and SVG, as well as the reopenable `.wisp` file
-- Full colour picker with recent colours, plus quick swatches
+- Export to PNG, JPEG and SVG, as well as the reopenable `.wisp` file —
+  whole sketch or just the selection
+- Full colour picker with recent colours, an eyedropper, and quick swatches
 - Light and dark themes, following the system by default
 - Reference images you can float over the canvas and trace straight through
 - Preset views, an orbit pad and zoom controls, for moving without gestures
-- Autosave, a project library with thumbnails, rename, duplicate, and
-  `.wisp` import/export
+- Autosave, a searchable project library with thumbnails, rename, duplicate,
+  and `.wisp` import/export
 - Installable, offline-capable PWA
 - Renders on demand, so a still sketch costs no battery
 
 ## What is not here yet
 
-No selection or transform tools, so strokes cannot be edited after they are
-drawn — only erased (stage 2). No liquify (stage 2.5). No glTF/OBJ/image
+A stroke can be moved, transformed, restyled and combined, but its centreline
+cannot be reshaped — that is liquify, stage 2.5, and the biggest single gap.
+Transforms are exact steps from a menu rather than a drag handle in the scene.
+No primitives to draw onto, and no snapping (stage 2). No glTF, OBJ or STL
 export (stage 4). The PC compute link is designed for but not built (stage 5).
 The Android APK shell is stage 6.
 

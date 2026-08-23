@@ -365,11 +365,20 @@ test.describe('copy and paste between layers', () => {
 });
 
 test.describe('layers', () => {
+  /**
+   * The occasional per-layer actions live behind a menu now, so that the
+   * common row can stay quiet enough to also list the layer's contents.
+   */
+  async function layerAction(page: Page, layer: string, action: string): Promise<void> {
+    await page.getByLabel(`More actions for ${layer}`).click();
+    await page.getByRole('button', { name: action, exact: true }).click();
+  }
+
   test('a layer can be duplicated with its contents', async ({ page }) => {
     await ready(page);
     await drawCrossingPair(page);
 
-    await page.getByLabel('Duplicate Layer 1').click();
+    await layerAction(page, 'Layer 1', 'Duplicate');
 
     await expect.poll(() => nodeCount(page)).toBe(4);
     const layerNames = await page.evaluate(() =>
@@ -389,7 +398,7 @@ test.describe('layers', () => {
     ]);
     await expect.poll(() => nodeCount(page)).toBe(3);
 
-    await page.getByLabel('Merge Layer 2 down').click();
+    await layerAction(page, 'Layer 2', 'Merge down');
 
     // Same three strokes, one layer.
     await expect.poll(() => nodeCount(page)).toBe(3);
@@ -399,7 +408,8 @@ test.describe('layers', () => {
 
   test('the bottom layer cannot merge down', async ({ page }) => {
     await ready(page);
-    await expect(page.getByLabel('Merge Layer 1 down')).toBeDisabled();
+    await page.getByLabel('More actions for Layer 1').click();
+    await expect(page.getByRole('button', { name: 'Merge down', exact: true })).toBeDisabled();
   });
 
   test('merging down is undoable', async ({ page }) => {
@@ -407,7 +417,7 @@ test.describe('layers', () => {
     await drawCrossingPair(page);
     await page.getByLabel('Add layer').click();
 
-    await page.getByLabel('Merge Layer 2 down').click();
+    await layerAction(page, 'Layer 2', 'Merge down');
     expect(await page.evaluate(() => window.__wisp.session.document.layers.length)).toBe(1);
 
     await page.keyboard.press('Control+z');

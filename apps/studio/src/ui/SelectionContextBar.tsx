@@ -86,11 +86,18 @@ export function SelectionContextBar() {
   return (
     <div
       ref={rootRef}
-      className="pointer-events-auto absolute z-30 -translate-x-1/2 -translate-y-full"
-      // Kept clear of the very top edge so the bar never sits half off-screen.
-      style={{ left: anchor.x, top: Math.max(anchor.y - 18, 96) }}
+      className="pointer-events-auto absolute z-30 -translate-x-1/2"
+      style={{
+        left: anchor.x,
+        // Kept clear of the top edge so the bar never sits half off-screen,
+        // and of the bottom so an open menu has somewhere to go.
+        top: Math.min(Math.max(anchor.y - 18, 96), window.innerHeight - 140),
+      }}
     >
-      <div className="panel flex items-center gap-0.5 p-1">
+      {/* Only the bar is lifted above the selection. Translating the whole
+          wrapper would raise it by the height of whatever menu is open, which
+          pushes a tall one clean off the top of the screen. */}
+      <div className="panel flex -translate-y-full items-center gap-0.5 p-1">
         <span className="px-2 text-[11px] tabular-nums text-muted">{count}</span>
 
         <div className="mx-0.5 h-6 w-px bg-line" />
@@ -165,7 +172,7 @@ export function SelectionContextBar() {
       </div>
 
       {menu === 'combine' && (
-        <div className="panel mt-1.5 flex w-52 flex-col gap-0.5 p-1.5">
+        <div className="panel mt-1.5 flex max-h-[55vh] w-52 flex-col gap-0.5 overflow-y-auto p-1.5">
           {OPS.map(({ op, hint }) => (
             <button
               key={op}
@@ -226,7 +233,7 @@ export function SelectionContextBar() {
       )}
 
       {menu === 'size' && shape && (
-        <div className="panel mt-1.5 flex w-56 flex-col gap-2 p-2.5">
+        <div className="panel mt-1.5 flex max-h-[55vh] w-56 flex-col gap-2 overflow-y-auto p-2.5">
           <span className="section-label">{shape.kind}</span>
           {dimensions.map(({ label, value }) => (
             <LengthField
@@ -242,7 +249,7 @@ export function SelectionContextBar() {
       )}
 
       {menu === 'layer' && (
-        <div className="panel mt-1.5 flex w-44 flex-col gap-0.5 p-1.5">
+        <div className="panel mt-1.5 flex max-h-[55vh] w-44 flex-col gap-0.5 overflow-y-auto p-1.5">
           {layers.map((layer) => (
             <button
               key={layer.id}
@@ -292,7 +299,7 @@ function TransformMenu({
   const degrees = (value: number) => (value * Math.PI) / 180;
 
   return (
-    <div className="panel mt-1.5 flex w-64 flex-col gap-3 p-2.5">
+    <div className="panel mt-1.5 flex max-h-[55vh] w-64 flex-col gap-3 overflow-y-auto p-2.5">
       <div className="flex flex-col gap-1.5">
         <span className="section-label flex items-center justify-between">
           <span>Rotate about</span>

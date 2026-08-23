@@ -247,6 +247,77 @@ test.describe('objects', () => {
     expect(await selectionSize(page)).toBe(2);
   });
 
+  test('duplicating a group makes a separate group', async ({ page }) => {
+    await ready(page);
+    await drag(page, [
+      [360, 300],
+      [460, 380],
+    ]);
+    await drag(page, [
+      [600, 300],
+      [700, 380],
+    ]);
+    await expect.poll(() => nodeCount(page)).toBe(2);
+
+    await page.evaluate(() => {
+      const state = window.__wisp.store.getState();
+      state.setSelection([...window.__wisp.session.document.nodes.keys()]);
+      state.groupSelection();
+    });
+    await page.waitForTimeout(250);
+
+    await page.evaluate(() => window.__wisp.store.getState().duplicateSelection());
+    await expect.poll(() => nodeCount(page)).toBe(4);
+
+    const groups = await page.evaluate(() =>
+      [...window.__wisp.session.document.nodes.values()].map((node) => node.groupId),
+    );
+    const distinct = new Set(groups);
+
+    // Two groups of two — not one group of four, which is what carrying the
+    // original group id across would give.
+    expect(distinct.size).toBe(2);
+    expect(await selectionSize(page)).toBe(2);
+  });
+
+  test('cancelling a rename keeps the old name', async ({ page }) => {
+    await ready(page);
+    await drawAndSelect(page);
+
+    await page.getByRole('button', { name: /^Expand / }).first().click();
+    await page.getByRole('button', { name: 'Stroke', exact: true }).dblclick();
+
+    const field = page.getByLabel('Object name');
+    await field.fill('Never applied');
+    await field.press('Escape');
+    await page.waitForTimeout(400);
+
+    // Escape unmounts the input, and the blur that follows must not commit
+    // the very edit that was just abandoned.
+    expect((await soleNode(page)).label).toBeUndefined();
+  });
+
+  test('the eyedropper keeps the selection it sampled from', async ({ page }) => {
+    await ready(page);
+    await drawAndSelect(page);
+
+    await page.evaluate(() => window.__wisp.store.getState().setStyle({ color: '#123456' }));
+    await page.waitForTimeout(250);
+
+    await page.evaluate(() => {
+      const state = window.__wisp.store.getState();
+      state.pickColorAt(state.selection[0]!);
+    });
+    await page.waitForTimeout(250);
+
+    // Sampling loads the brush; it must not repaint or deselect what it read.
+    expect(await selectionSize(page)).toBe(1);
+    expect((await soleNode(page)).color.toLowerCase()).toBe('#123456');
+    expect(
+      await page.evaluate(() => window.__wisp.store.getState().style.color.toLowerCase()),
+    ).toBe('#123456');
+  });
+
   test('duplicating leaves the clipboard alone', async ({ page }) => {
     await ready(page);
     await drawAndSelect(page);

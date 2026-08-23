@@ -812,7 +812,10 @@ export const useStore = create<AppState>((set, get) => ({
     set({ statusMessage: `Duplicated ${meta.name}` });
   },
 
-  setSelection: (ids) => set({ selection: selectable(ids) }),
+  // Groups expand here too, not only on tap: dragging a box over part of a
+  // group and getting a partial group would make the two ways of selecting
+  // disagree about what a group is.
+  setSelection: (ids) => set({ selection: selectable(expandGroups(session.document, ids)) }),
 
   setMarquee: (marquee) => set({ marquee }),
 
@@ -1045,12 +1048,18 @@ export const useStore = create<AppState>((set, get) => ({
     set({ eyedropper: false });
     if (!node) return;
 
-    // Straight to setStyle so the colour joins the recent list like any other,
-    // but with the selection cleared first so it does not restyle what it just
-    // sampled from.
-    set({ selection: [] });
-    get().setStyle({ color: node.style.color });
-    set({ statusMessage: `Picked ${node.style.color}` });
+    // Deliberately not through setStyle: that would restyle whatever is
+    // selected, so sampling a colour would repaint the selection with it.
+    // Picking a colour should load the brush, not change the drawing.
+    const color = node.style.color;
+    set((state) => ({
+      style: { ...state.style, color },
+      recentColors: [
+        color.toLowerCase(),
+        ...state.recentColors.filter((existing) => existing !== color.toLowerCase()),
+      ].slice(0, MAX_RECENT_COLORS),
+      statusMessage: `Picked ${color}`,
+    }));
   },
 
   reorderLayer: (layerId, direction) => {

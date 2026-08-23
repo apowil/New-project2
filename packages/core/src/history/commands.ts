@@ -200,7 +200,7 @@ export class SetStyleCommand implements Command {
 
   constructor(
     private readonly ids: NodeId[],
-    private readonly patch: Partial<StrokeStyle>,
+    private patch: Partial<StrokeStyle>,
   ) {}
 
   /**
@@ -219,6 +219,11 @@ export class SetStyleCommand implements Command {
 
     // Undo has to land on the style from before the whole drag, not mid-drag.
     this.previous = previous.previous;
+
+    // Both patches, not just the newer one. Two different properties changed
+    // inside the window — a colour and then a width — would otherwise leave
+    // redo reapplying only the width, silently dropping the colour.
+    this.patch = { ...previous.patch, ...this.patch };
     return true;
   }
 

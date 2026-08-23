@@ -212,6 +212,18 @@ function RenameField({
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
+  /**
+   * Removing a focused input fires one last blur, which would call `onDone` a
+   * second time — and after Escape that second call carries the typed value,
+   * committing the rename the user just cancelled.
+   */
+  const finished = useRef(false);
+
+  const finish = (name: string | null) => {
+    if (finished.current) return;
+    finished.current = true;
+    onDone(name);
+  };
 
   useEffect(() => ref.current?.select(), []);
 
@@ -220,10 +232,10 @@ function RenameField({
       ref={ref}
       value={value}
       onChange={(event) => setValue(event.target.value)}
-      onBlur={() => onDone(value)}
+      onBlur={() => finish(value)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') onDone(value);
-        if (event.key === 'Escape') onDone(null);
+        if (event.key === 'Enter') finish(value);
+        if (event.key === 'Escape') finish(null);
       }}
       aria-label="Object name"
       className="min-w-0 flex-1 rounded bg-sunken px-1 text-xs text-primary outline-none"

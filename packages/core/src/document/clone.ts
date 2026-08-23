@@ -64,5 +64,27 @@ export function cloneNode(node: SceneNode, layerId: LayerId = node.layerId): Sce
   }
 }
 
-export const cloneNodes = (nodes: readonly SceneNode[], layerId?: LayerId): SceneNode[] =>
-  nodes.map((node) => cloneNode(node, layerId ?? node.layerId));
+/**
+ * Copies a batch of nodes, giving any groups among them fresh identities.
+ *
+ * Without the remap the copies would carry the *original* group id and so join
+ * the group they were copied from: duplicating a group of three would leave one
+ * group of six, and tapping any member would select all of them. Members
+ * copied together stay grouped together; they simply become their own group.
+ */
+export function cloneNodes(nodes: readonly SceneNode[], layerId?: LayerId): SceneNode[] {
+  const groups = new Map<string, string>();
+
+  return nodes.map((node) => {
+    const copy = cloneNode(node, layerId ?? node.layerId);
+    if (copy.groupId !== undefined) {
+      let replacement = groups.get(copy.groupId);
+      if (replacement === undefined) {
+        replacement = createId('group');
+        groups.set(copy.groupId, replacement);
+      }
+      copy.groupId = replacement;
+    }
+    return copy;
+  });
+}

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useStore } from '../state/store.js';
+import { DropperIcon } from './Icons.js';
+
 /**
  * Hue strip plus a saturation/value square, built from CSS gradients rather
  * than a canvas — no image data to read back, and it stays crisp at any
@@ -165,6 +168,7 @@ export function ColorPicker({ value, onChange, recent }: ColorPickerProps) {
           className="h-8 w-8 shrink-0 rounded-lg border border-line"
           style={{ background: value }}
         />
+        <Eyedropper />
         <input
           value={hexDraft}
           onChange={(event) => {
@@ -186,6 +190,7 @@ export function ColorPicker({ value, onChange, recent }: ColorPickerProps) {
       {recent.length > 0 && (
         <div className="flex flex-col gap-1.5">
           <span className="section-label">Recent</span>
+
           <div className="flex flex-wrap gap-1.5">
             {recent.map((color) => (
               <button
@@ -202,5 +207,45 @@ export function ColorPicker({ value, onChange, recent }: ColorPickerProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Sample a colour from something already drawn.
+ *
+ * Arming a mode rather than being a tool of its own: it is one tap, and having
+ * to switch back to the pen afterwards would cost more than it saves. The next
+ * tap on the canvas takes that object's colour; a tap on nothing cancels.
+ */
+function Eyedropper() {
+  const armed = useStore((state) => state.eyedropper);
+  const setEyedropper = useStore((state) => state.setEyedropper);
+  const setTool = useStore((state) => state.setTool);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Picking needs the select tool's hit testing, so arm both together.
+        if (!armed) setTool('select');
+        setEyedropper(!armed);
+      }}
+      aria-label="Pick a colour from the sketch"
+      aria-pressed={armed}
+      title={armed ? 'Tap an object to take its colour' : 'Pick a colour from the sketch'}
+      className="h-8 w-8 shrink-0 rounded-lg border border-line text-muted transition-colors hover:text-primary"
+      style={
+        armed
+          ? {
+              background: 'color-mix(in srgb, var(--color-accent) 16%, transparent)',
+              color: 'var(--color-accent)',
+            }
+          : undefined
+      }
+    >
+      <span className="flex items-center justify-center">
+        <DropperIcon />
+      </span>
+    </button>
   );
 }

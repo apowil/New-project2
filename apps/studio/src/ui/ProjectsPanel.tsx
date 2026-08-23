@@ -29,11 +29,17 @@ export function ProjectsPanel() {
   const deleteProject = useStore((state) => state.deleteProject);
   const newSketch = useStore((state) => state.newSketch);
   const exportSketch = useStore((state) => state.exportSketch);
+  const exportSelection = useStore((state) => state.exportSelection);
   const importSketch = useStore((state) => state.importSketch);
   const renameProject = useStore((state) => state.renameProject);
   const exportImage = useStore((state) => state.exportImage);
   const duplicateProject = useStore((state) => state.duplicateProject);
   const persistent = useStore((state) => state.storageIsPersistent);
+  const search = useStore((state) => state.librarySearch);
+  const setSearch = useStore((state) => state.setLibrarySearch);
+  const sort = useStore((state) => state.librarySort);
+  const setSort = useStore((state) => state.setLibrarySort);
+  const selectionSize = useStore((state) => state.selection.length);
 
   useEffect(() => {
     if (!open) return;
@@ -47,6 +53,13 @@ export function ProjectsPanel() {
   if (!open) return null;
 
   const currentId = session.document.id;
+
+  const needle = search.trim().toLowerCase();
+  const shown = projects
+    .filter((project) => !needle || project.name.toLowerCase().includes(needle))
+    .sort((a, b) =>
+      sort === 'name' ? a.name.localeCompare(b.name) : b.updatedAt - a.updatedAt,
+    );
 
   return (
     <div
@@ -72,7 +85,12 @@ export function ProjectsPanel() {
             Import
           </button>
 
-          <ExportMenu onWisp={exportSketch} onImage={(format) => void exportImage(format)} />
+          <ExportMenu
+            onWisp={exportSketch}
+            onImage={(format) => void exportImage(format)}
+            selectionSize={selectionSize}
+            onWispSelection={exportSelection}
+          />
 
           <button
             type="button"
@@ -104,14 +122,45 @@ export function ProjectsPanel() {
           </p>
         )}
 
+        {projects.length > 0 && (
+          <div className="flex items-center gap-2 border-b border-line/70 px-5 py-2">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search sketches"
+              aria-label="Search sketches"
+              spellCheck={false}
+              className="min-w-0 flex-1 rounded-lg bg-sunken px-2.5 py-1.5 text-xs text-primary outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+            />
+            <div className="flex gap-0.5">
+              {(['recent', 'name'] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className="chip capitalize"
+                  data-active={sort === option}
+                  onClick={() => setSort(option)}
+                  aria-label={`Sort by ${option}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {projects.length === 0 ? (
             <p className="pt-12 text-center text-sm text-muted">
               Nothing saved yet. Draw something and it will appear here.
             </p>
+          ) : shown.length === 0 ? (
+            <p className="pt-12 text-center text-sm text-muted">
+              No sketch matches “{search.trim()}”.
+            </p>
           ) : (
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4">
-              {projects.map((project) => {
+              {shown.map((project) => {
                 const isCurrent = project.id === currentId;
                 return (
                   <li key={project.id}>
@@ -213,9 +262,13 @@ export function ProjectsPanel() {
 function ExportMenu({
   onWisp,
   onImage,
+  selectionSize,
+  onWispSelection,
 }: {
   onWisp: () => void;
   onImage: (format: ImageFormat) => void;
+  selectionSize: number;
+  onWispSelection: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -257,6 +310,19 @@ function ExportMenu({
             Wisp file
             <span className="block text-[11px] text-muted">Reopenable, keeps everything</span>
           </button>
+
+          {selectionSize > 0 && (
+            <button
+              type="button"
+              className="chip text-left"
+              onClick={() => choose(onWispSelection)}
+            >
+              Selection only
+              <span className="block text-[11px] text-muted">
+                {selectionSize} item{selectionSize === 1 ? '' : 's'} as a Wisp file
+              </span>
+            </button>
+          )}
           {(['png', 'jpg', 'svg'] as ImageFormat[]).map((format) => (
             <button
               key={format}

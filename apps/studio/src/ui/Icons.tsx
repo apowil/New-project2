@@ -221,6 +221,55 @@ export const StackIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const DuplicateIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <rect x="4" y="4" width="11" height="11" rx="2" />
+    <path d="M9 19h9a2 2 0 0 0 2-2V9" />
+  </svg>
+);
+
+export const TransformIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <path d="M4.5 9.5A8 8 0 0 1 18 7.6" />
+    <path d="M4 5v4.5h4.5" />
+    <path d="M19.5 14.5A8 8 0 0 1 6 16.4" />
+    <path d="M20 19v-4.5h-4.5" />
+  </svg>
+);
+
+export const DimensionIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M4 8v8M20 8v8" />
+    <path d="M4 12h16" />
+    <path d="M7 9.5L4.5 12 7 14.5M17 9.5l2.5 2.5-2.5 2.5" />
+  </svg>
+);
+
+export const DropperIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={18} height={18} aria-hidden="true">
+    <path d="M14.5 4.5a2.1 2.1 0 0 1 3 3l-1.5 1.5 1 1-2 2-1-1-6 6H5v-3l6-6-1-1 2-2 1 1z" />
+  </svg>
+);
+
+export const OutlinerIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M4 6h4M4 12h4M4 18h4" />
+    <path d="M11 6h9M11 12h9M11 18h9" />
+  </svg>
+);
+
+export const ChevronUpIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={16} height={16} aria-hidden="true">
+    <path d="M6 14l6-6 6 6" />
+  </svg>
+);
+
+export const ChevronDownIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} width={16} height={16} aria-hidden="true">
+    <path d="M6 10l6 6 6-6" />
+  </svg>
+);
+
 export const TrashIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M4 7h16" />

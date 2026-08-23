@@ -73,6 +73,15 @@ export class ToolController implements GestureHandlers {
         const store = useStore.getState();
         const hit = this.viewport.pickSurface(input.x, input.y);
 
+        // The eyedropper borrows the select tool's picking rather than being a
+        // tool of its own: it is one tap, and having to switch back afterwards
+        // would cost more than it saves.
+        if (store.eyedropper) {
+          if (hit?.nodeId) store.pickColorAt(hit.nodeId);
+          else store.setEyedropper(false);
+          return;
+        }
+
         if (hit?.nodeId && store.selection.includes(hit.nodeId) && !input.shiftKey) {
           this.beginMove(input, store.selection, hit.nodeId);
           return;

@@ -1,3 +1,4 @@
+import { type Vec3 } from '../math/vec3.js';
 import { createId } from './ids.js';
 import {
   type Layer,
@@ -88,6 +89,64 @@ export function visibleNodes(doc: SketchDocument): SceneNode[] {
 export function isNodeEditable(doc: SketchDocument, node: SceneNode): boolean {
   if (node.hidden || node.locked) return false;
   return isLayerEditable(doc, node.layerId);
+}
+
+/**
+ * The axis-aligned bounds of some nodes, in world space.
+ *
+ * Taken from the document rather than from rendered meshes so that transforms
+ * and numeric placement work the same with or without a viewport, and can be
+ * tested without one.
+ */
+export function nodesBounds(
+  doc: SketchDocument,
+  ids: readonly NodeId[],
+): { min: Vec3; max: Vec3 } | null {
+  const min = { x: Infinity, y: Infinity, z: Infinity };
+  const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  let found = false;
+
+  const include = (p: Vec3): void => {
+    found = true;
+    if (p.x < min.x) min.x = p.x;
+    if (p.y < min.y) min.y = p.y;
+    if (p.z < min.z) min.z = p.z;
+    if (p.x > max.x) max.x = p.x;
+    if (p.y > max.y) max.y = p.y;
+    if (p.z > max.z) max.z = p.z;
+  };
+
+  for (const id of ids) {
+    const node = doc.nodes.get(id);
+    if (!node) continue;
+
+    if (node.type === 'stroke') {
+      for (const sample of node.samples) include(sample.position);
+    } else if (node.type === 'baked') {
+      const { positions } = node;
+      for (let i = 0; i + 2 < positions.length; i += 3) {
+        include({ x: positions[i]!, y: positions[i + 1]!, z: positions[i + 2]! });
+      }
+    } else if (node.type === 'annotation') {
+      include(node.from);
+      include(node.to);
+    } else {
+      include(node.transform.position);
+    }
+  }
+
+  return found ? { min, max } : null;
+}
+
+/** The middle of those bounds — the natural pivot for a transform. */
+export function nodesCentre(doc: SketchDocument, ids: readonly NodeId[]): Vec3 | null {
+  const bounds = nodesBounds(doc, ids);
+  if (!bounds) return null;
+  return {
+    x: (bounds.min.x + bounds.max.x) / 2,
+    y: (bounds.min.y + bounds.max.y) / 2,
+    z: (bounds.min.z + bounds.max.z) / 2,
+  };
 }
 
 /** Every node sharing a group with the ones given, plus the ones given. */

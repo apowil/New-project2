@@ -31,6 +31,8 @@ export interface StrokeInput {
   pointerType: string;
   /** Held modifier, so a desktop user can add to a selection. */
   shiftKey: boolean;
+  /** Held modifier: draws a shape outwards from its centre. */
+  altKey: boolean;
 }
 
 export interface GestureHandlers {
@@ -153,6 +155,7 @@ export class InputRouter {
       timestamp: event.timeStamp,
       pointerType: event.pointerType,
       shiftKey: event.shiftKey,
+      altKey: event.altKey,
     };
   }
 

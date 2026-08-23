@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { shapeDimensions } from '@wisp/core';
+import { nodesCentre, shapeDimensions } from '@wisp/core';
 
 import { session, useStore } from '../state/store.js';
 import { BOOLEAN_LABELS, type BooleanOp } from '../tools/booleans.js';
-import { CopyIcon, ScissorsIcon, StackIcon, TrashIcon } from './Icons.js';
+import { CopyIcon, DuplicateIcon, ScissorsIcon, StackIcon, TransformIcon, TrashIcon } from './Icons.js';
 import { LengthField } from './LengthField.js';
 
 /**
@@ -39,7 +39,19 @@ export function SelectionContextBar() {
   const unit = useStore((state) => state.unit);
   const editShapeDimension = useStore((state) => state.editShapeDimension);
 
-  const [menu, setMenu] = useState<'combine' | 'layer' | 'size' | null>(null);
+  const duplicateSelection = useStore((state) => state.duplicateSelection);
+  const rotateSelection = useStore((state) => state.rotateSelection);
+  const scaleSelection = useStore((state) => state.scaleSelection);
+  const mirrorSelection = useStore((state) => state.mirrorSelection);
+  const placeSelection = useStore((state) => state.placeSelection);
+  const groupSelection = useStore((state) => state.groupSelection);
+  const ungroupSelection = useStore((state) => state.ungroupSelection);
+
+  // Redrawn whenever the document changes, so the position readout below is
+  // never stale after a move.
+  const revision = useStore((state) => state.revision);
+
+  const [menu, setMenu] = useState<'combine' | 'layer' | 'size' | 'transform' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +78,10 @@ export function SelectionContextBar() {
   const shape =
     soleNode && soleNode.type === 'stroke' && soleNode.shape ? soleNode.shape.params : null;
   const dimensions = shape ? shapeDimensions(shape) : [];
+
+  void revision;
+  const centre = nodesCentre(session.document, selection);
+  const grouped = selection.some((id) => session.document.nodes.get(id)?.groupId !== undefined);
 
   return (
     <div
@@ -96,7 +112,20 @@ export function SelectionContextBar() {
           <span className="text-xs">Paste</span>
         </BarButton>
 
+        <BarButton label="Duplicate" onClick={duplicateSelection} title="Duplicate (Ctrl+D)">
+          <DuplicateIcon />
+        </BarButton>
+
         <div className="mx-0.5 h-6 w-px bg-line" />
+
+        <BarButton
+          label="Transform"
+          onClick={() => setMenu((open) => (open === 'transform' ? null : 'transform'))}
+          active={menu === 'transform'}
+          title="Rotate, scale, mirror and place"
+        >
+          <TransformIcon />
+        </BarButton>
 
         <BarButton
           label="Combine"
@@ -151,7 +180,49 @@ export function SelectionContextBar() {
               {BOOLEAN_LABELS[op]}
             </button>
           ))}
+
+          <div className="my-1 h-px bg-line" />
+
+          {/* Grouping sits with the booleans because it answers the same
+              question — "keep these together" — without baking the geometry,
+              which is the one thing a boolean can never undo. */}
+          <button
+            type="button"
+            className="chip text-left"
+            onClick={() => {
+              groupSelection();
+              setMenu(null);
+            }}
+            title="Keep these together without changing the geometry"
+          >
+            Group
+            <span className="block text-[11px] text-muted">Reversible, unlike a boolean</span>
+          </button>
+
+          {grouped && (
+            <button
+              type="button"
+              className="chip text-left"
+              onClick={() => {
+                ungroupSelection();
+                setMenu(null);
+              }}
+            >
+              Ungroup
+            </button>
+          )}
         </div>
+      )}
+
+      {menu === 'transform' && (
+        <TransformMenu
+          unit={unit}
+          centre={centre}
+          onRotate={rotateSelection}
+          onScale={scaleSelection}
+          onMirror={mirrorSelection}
+          onPlace={placeSelection}
+        />
       )}
 
       {menu === 'size' && shape && (
@@ -184,6 +255,122 @@ export function SelectionContextBar() {
             >
               {layer.name}
             </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const AXES = ['x', 'y', 'z'] as const;
+type Axis = (typeof AXES)[number];
+
+/**
+ * Rotating, scaling, mirroring and placing a selection.
+ *
+ * Deliberately buttons and typed numbers rather than a drag handle in the
+ * scene. A gizmo is quicker for a rough nudge, but the reason to reach for
+ * this menu is usually that you want *exactly* ninety degrees or exactly half
+ * size, and a handle under a fingertip cannot promise that.
+ */
+function TransformMenu({
+  unit,
+  centre,
+  onRotate,
+  onScale,
+  onMirror,
+  onPlace,
+}: {
+  unit: Parameters<typeof LengthField>[0]['unit'];
+  centre: { x: number; y: number; z: number } | null;
+  onRotate: (axis: Axis, radians: number) => void;
+  onScale: (factor: number) => void;
+  onMirror: (axis: Axis) => void;
+  onPlace: (axis: Axis, metres: number) => void;
+}) {
+  const [axis, setAxis] = useState<Axis>('y');
+  const degrees = (value: number) => (value * Math.PI) / 180;
+
+  return (
+    <div className="panel mt-1.5 flex w-64 flex-col gap-3 p-2.5">
+      <div className="flex flex-col gap-1.5">
+        <span className="section-label flex items-center justify-between">
+          <span>Rotate about</span>
+          <span className="flex gap-0.5">
+            {AXES.map((candidate) => (
+              <button
+                key={candidate}
+                type="button"
+                className="chip px-2 py-0.5 uppercase"
+                data-active={axis === candidate}
+                onClick={() => setAxis(candidate)}
+                aria-label={`Rotate about ${candidate.toUpperCase()}`}
+              >
+                {candidate}
+              </button>
+            ))}
+          </span>
+        </span>
+        <div className="grid grid-cols-4 gap-1">
+          {[-90, -15, 15, 90].map((step) => (
+            <button
+              key={step}
+              type="button"
+              className="chip tabular-nums"
+              onClick={() => onRotate(axis, degrees(step))}
+              aria-label={`Rotate ${step} degrees`}
+            >
+              {step > 0 ? `+${step}` : step}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+        <span className="section-label">Scale</span>
+        <div className="grid grid-cols-4 gap-1">
+          {[0.5, 0.9, 1.1, 2].map((factor) => (
+            <button
+              key={factor}
+              type="button"
+              className="chip tabular-nums"
+              onClick={() => onScale(factor)}
+              aria-label={`Scale by ${factor}`}
+            >
+              {factor}×
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+        <span className="section-label">Mirror</span>
+        <div className="grid grid-cols-3 gap-1">
+          {AXES.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              className="chip uppercase"
+              onClick={() => onMirror(candidate)}
+              aria-label={`Mirror in ${candidate.toUpperCase()}`}
+            >
+              {candidate}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {centre && (
+        <div className="flex flex-col gap-2 border-t border-line pt-3">
+          <span className="section-label">Centre at</span>
+          {AXES.map((candidate) => (
+            <LengthField
+              key={candidate}
+              label={candidate.toUpperCase()}
+              value={centre[candidate]}
+              unit={unit}
+              onCommit={(metres) => onPlace(candidate, metres)}
+            />
           ))}
         </div>
       )}

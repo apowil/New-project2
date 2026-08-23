@@ -101,7 +101,7 @@ export function TextPrompt({
       </div>
 
       <p className="text-[11px] leading-snug text-muted">
-        Capitals-only technical face. Shift+Enter for a new line.
+        Single-stroke technical face. Shift+Enter for a new line.
       </p>
     </div>
   );

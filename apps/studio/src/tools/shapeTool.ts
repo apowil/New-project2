@@ -178,12 +178,39 @@ export class ShapeTool {
     if (!point) return null;
 
     const kind = useStore.getState().shapeKind;
-    const du = point.u - drag.startU;
-    const dv = point.v - drag.startV;
+    let du = point.u - drag.startU;
+    let dv = point.v - drag.startV;
+
+    // Shift constrains: a square rather than a rectangle, and a line snapped
+    // to the nearest 45°. Without it an "exact" shape tool still needs a
+    // steady hand for the commonest cases.
+    if (input.shiftKey) {
+      if (kind === 'rectangle') {
+        const side = Math.max(Math.abs(du), Math.abs(dv));
+        du = Math.sign(du || 1) * side;
+        dv = Math.sign(dv || 1) * side;
+      } else if (kind === 'line') {
+        const step = Math.PI / 4;
+        const angle = Math.round(Math.atan2(dv, du) / step) * step;
+        const reach = Math.hypot(du, dv);
+        du = Math.cos(angle) * reach;
+        dv = Math.sin(angle) * reach;
+      }
+    }
 
     switch (kind) {
       case 'rectangle':
-        return { kind, u: drag.startU, v: drag.startV, width: du, height: dv };
+        // Alt grows the rectangle from its centre, which is how you place one
+        // concentric with something already drawn.
+        return input.altKey
+          ? {
+              kind,
+              u: drag.startU - du,
+              v: drag.startV - dv,
+              width: du * 2,
+              height: dv * 2,
+            }
+          : { kind, u: drag.startU, v: drag.startV, width: du, height: dv };
       case 'circle':
         // Dragged from the centre outwards, which is how a compass works.
         return { kind, u: drag.startU, v: drag.startV, radius: Math.hypot(du, dv) };
@@ -204,7 +231,8 @@ export class ShapeTool {
           v: drag.startV,
           points: [
             { u: drag.startU, v: drag.startV },
-            { u: point.u, v: point.v },
+            // From the deltas, not the raw point, so the 45° snap above holds.
+            { u: drag.startU + du, v: drag.startV + dv },
           ],
         };
     }

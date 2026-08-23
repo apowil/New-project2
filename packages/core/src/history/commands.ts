@@ -190,14 +190,37 @@ export class SetLayerPropertyCommand<K extends keyof Layer> implements Command {
   }
 }
 
+/** How long after one style change another counts as the same gesture. */
+const STYLE_MERGE_WINDOW_MS = 700;
+
 export class SetStyleCommand implements Command {
   readonly label = 'Change style';
   private previous = new Map<NodeId, StrokeStyle>();
+  private readonly at = Date.now();
 
   constructor(
     private readonly ids: NodeId[],
     private readonly patch: Partial<StrokeStyle>,
   ) {}
+
+  /**
+   * Absorbs the previous style change when it is part of the same gesture.
+   *
+   * Dragging a width slider fires a change per frame; without this, undo would
+   * walk back through sixty of them. The time window is what separates "still
+   * dragging" from "changed my mind a minute later", which should stay two
+   * separate undo steps.
+   */
+  mergeWith(previous: Command): boolean {
+    if (!(previous instanceof SetStyleCommand)) return false;
+    if (this.at - previous.at > STYLE_MERGE_WINDOW_MS) return false;
+    if (previous.ids.length !== this.ids.length) return false;
+    if (!previous.ids.every((id, i) => this.ids[i] === id)) return false;
+
+    // Undo has to land on the style from before the whole drag, not mid-drag.
+    this.previous = previous.previous;
+    return true;
+  }
 
   apply(doc: SketchDocument): void {
     this.previous.clear();

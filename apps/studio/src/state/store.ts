@@ -4,11 +4,18 @@ import {
   AddNodesCommand,
   DeleteNodesCommand,
   DuplicateLayerCommand,
+  GroupNodesCommand,
   MergeLayersCommand,
   MoveNodesToLayerCommand,
+  ReorderLayerCommand,
   ReplaceNodesCommand,
+  SetNodeFlagsCommand,
+  SetStyleCommand,
+  TransformNodesCommand,
+  UngroupNodesCommand,
   cloneNodes,
   createId,
+  expandGroups,
   isSolid,
   History,
   InlineOpRunner,
@@ -16,10 +23,18 @@ import {
   SetLayerPropertyCommand,
   createDocument,
   createLayer,
+  isNodeEditable,
+  mirror as mirrorAbout,
+  nodesCentre,
+  TranslateNodesCommand,
+  rotation,
+  scaling,
   serializeDocument,
   deserializeDocument,
   NO_MIRROR,
+  type Affine,
   type Command,
+  type NodeFlags,
   type SceneNode,
   type Layer,
   type MirrorAxes,
@@ -28,6 +43,7 @@ import {
   type ShapeKind,
   type StrokeStyle,
   type Unit,
+  type Vec3,
   withDimension,
 } from '@wisp/core';
 
@@ -79,6 +95,19 @@ export interface ReferenceImage {
 }
 
 const MAX_RECENT_COLORS = 12;
+
+/**
+ * Narrows a set of ids to the ones that can actually be selected.
+ *
+ * Filtering here rather than at each call site means a locked or hidden node
+ * cannot be reached by tapping it, by dragging a box over it, or by selecting
+ * its layer's contents — one rule, no gaps.
+ */
+const selectable = (ids: readonly string[]): string[] =>
+  ids.filter((id) => {
+    const node = session.document.nodes.get(id);
+    return node !== undefined && isNodeEditable(session.document, node);
+  });
 
 /**
  * The document and its history live outside React.
@@ -177,6 +206,11 @@ interface AppState {
   textPrompt: { x: number; y: number } | null;
   recentColors: string[];
   reference: ReferenceImage | null;
+  /** Set while the next tap should sample a colour rather than select. */
+  eyedropper: boolean;
+  /** Filter text for the sketch library. */
+  librarySearch: string;
+  librarySort: 'recent' | 'name';
 
   /** Ids of selected nodes. An array, so React sees a new identity on change. */
   selection: string[];
@@ -229,9 +263,28 @@ interface AppState {
   paste: () => void;
   moveSelectionToLayer: (layerId: string) => void;
   applyBoolean: (op: BooleanOp) => void;
+  duplicateSelection: () => void;
+
+  restyleSelection: (patch: Partial<StrokeStyle>) => void;
+  transformSelection: (build: (pivot: Vec3) => Affine, label: string) => void;
+  rotateSelection: (axis: 'x' | 'y' | 'z', radians: number) => void;
+  scaleSelection: (factor: number) => void;
+  mirrorSelection: (axis: 'x' | 'y' | 'z') => void;
+  placeSelection: (axis: 'x' | 'y' | 'z', metres: number) => void;
+
+  groupSelection: () => void;
+  ungroupSelection: () => void;
+  setNodeFlags: (ids: string[], patch: NodeFlags, label?: string) => void;
+  renameNode: (id: string, name: string) => void;
+  toggleNodeHidden: (id: string) => void;
+  toggleNodeLocked: (id: string) => void;
+
+  pickColorAt: (id: string) => void;
+  setEyedropper: (active: boolean) => void;
 
   mergeLayerDown: (layerId: string) => void;
   duplicateLayer: (layerId: string) => void;
+  reorderLayer: (layerId: string, direction: -1 | 1) => void;
 
   run: (command: Command) => void;
   undo: () => void;
@@ -250,7 +303,10 @@ interface AppState {
   renameSketch: (name: string) => void;
   refreshProjects: () => Promise<void>;
   setProjectsOpen: (open: boolean) => void;
+  setLibrarySearch: (text: string) => void;
+  setLibrarySort: (sort: 'recent' | 'name') => void;
   exportSketch: () => void;
+  exportSelection: () => void;
   importSketch: () => Promise<void>;
   saveNow: () => Promise<void>;
 }
@@ -295,13 +351,25 @@ export const useStore = create<AppState>((set, get) => ({
   textPrompt: null,
   recentColors: [],
   reference: null,
+  eyedropper: false,
+  librarySearch: '',
+  librarySort: 'recent',
   selection: [],
   clipboard: [],
   marquee: null,
   selectionAnchor: null,
 
-  setTool: (tool) => set({ tool }),
-  setStyle: (patch) =>
+  setTool: (tool) => set({ tool, eyedropper: false }),
+
+  /**
+   * Changes the style.
+   *
+   * With something selected this restyles it, which is what every other canvas
+   * app does and what makes the style controls useful after the fact rather
+   * than only before. The current style follows along either way, so the next
+   * stroke matches what was just set.
+   */
+  setStyle: (patch) => {
     set((state) => {
       const style = { ...state.style, ...patch };
       if (!patch.color || patch.color === state.style.color) return { style };
@@ -313,10 +381,32 @@ export const useStore = create<AppState>((set, get) => ({
         ...state.recentColors.filter((existing) => existing !== color),
       ].slice(0, MAX_RECENT_COLORS);
       return { style, recentColors };
-    }),
+    });
+    get().restyleSelection(patch);
+  },
 
-  applyBrush: (id) =>
-    set((state) => ({ style: { ...state.style, ...findBrush(id).shape } })),
+  applyBrush: (id) => {
+    const shape = findBrush(id).shape;
+    set((state) => ({ style: { ...state.style, ...shape } }));
+    get().restyleSelection(shape);
+  },
+
+  /**
+   * Applies a style patch to whatever is selected.
+   *
+   * Locked nodes are skipped rather than silently changed — a lock that only
+   * stops some kinds of edit is not a lock.
+   */
+  restyleSelection: (patch) => {
+    const doc = session.document;
+    const ids = get().selection.filter((id) => {
+      const node = doc.nodes.get(id);
+      return node !== undefined && isNodeEditable(doc, node);
+    });
+    if (ids.length === 0) return;
+
+    get().run(new SetStyleCommand(ids, patch));
+  },
 
   setPlaneMode: (mode) => set((state) => ({ plane: { ...state.plane, mode, offset: 0 } })),
   setPlaneOffset: (offset) => set((state) => ({ plane: { ...state.plane, offset } })),
@@ -568,9 +658,45 @@ export const useStore = create<AppState>((set, get) => ({
     if (projectsOpen) void get().refreshProjects();
   },
 
+  setLibrarySearch: (librarySearch) => set({ librarySearch }),
+  setLibrarySort: (librarySort) => set({ librarySort }),
+
   exportSketch: () => {
     downloadDocument(session.document);
     set({ statusMessage: `Exported ${session.document.name}` });
+  },
+
+  /**
+   * Writes only the selected nodes to a file.
+   *
+   * Built as a throwaway document rather than by filtering the manifest, so
+   * the file that comes out is an ordinary sketch that opens like any other —
+   * and its layers are only the ones the selection actually used, rather than
+   * a dozen empty ones carried over for no reason.
+   */
+  exportSelection: () => {
+    const doc = session.document;
+    const { selection } = get();
+    if (selection.length === 0) return;
+
+    const nodes = selection
+      .map((id) => doc.nodes.get(id))
+      .filter((node): node is SceneNode => node !== undefined);
+    if (nodes.length === 0) return;
+
+    const used = new Set(nodes.map((node) => node.layerId));
+    const extract: SketchDocument = {
+      ...doc,
+      id: createId('doc'),
+      name: `${doc.name} (selection)`,
+      layers: doc.layers.filter((layer) => used.has(layer.id)),
+      nodes: new Map(nodes.map((node) => [node.id, node])),
+      order: doc.order.filter((id) => selection.includes(id)),
+    };
+    extract.activeLayerId = extract.layers[0]?.id ?? doc.activeLayerId;
+
+    downloadDocument(extract);
+    set({ statusMessage: `Exported ${nodes.length} item${nodes.length === 1 ? '' : 's'}` });
   },
 
   importSketch: async () => {
@@ -679,7 +805,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ statusMessage: `Duplicated ${meta.name}` });
   },
 
-  setSelection: (ids) => set({ selection: ids }),
+  setSelection: (ids) => set({ selection: selectable(ids) }),
 
   setMarquee: (marquee) => set({ marquee }),
 
@@ -687,22 +813,33 @@ export const useStore = create<AppState>((set, get) => ({
 
   toggleSelected: (id, additive) =>
     set((state) => {
+      // Tapping one member of a group selects all of it: that is what makes a
+      // group a group rather than a label.
+      const ids = selectable(expandGroups(session.document, [id]));
+      if (ids.length === 0) return {};
+
       if (!additive) {
         // Tapping the only selected item again clears, which is how every
         // other canvas app behaves.
-        return { selection: state.selection.length === 1 && state.selection[0] === id ? [] : [id] };
+        const alreadyExactly =
+          state.selection.length === ids.length &&
+          ids.every((member) => state.selection.includes(member));
+        return { selection: alreadyExactly ? [] : ids };
       }
+
       return state.selection.includes(id)
-        ? { selection: state.selection.filter((existing) => existing !== id) }
-        : { selection: [...state.selection, id] };
+        ? { selection: state.selection.filter((existing) => !ids.includes(existing)) }
+        : { selection: [...state.selection, ...ids.filter((m) => !state.selection.includes(m))] };
     }),
 
   clearSelection: () => set({ selection: [] }),
 
   selectLayer: (layerId) =>
     set({
-      selection: session.document.order.filter(
-        (id) => session.document.nodes.get(id)?.layerId === layerId,
+      selection: selectable(
+        session.document.order.filter(
+          (id) => session.document.nodes.get(id)?.layerId === layerId,
+        ),
       ),
     }),
 
@@ -774,6 +911,147 @@ export const useStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ statusMessage: describeError(error, 'That operation could not be completed.') });
     }
+  },
+
+  duplicateSelection: () => {
+    const nodes = get()
+      .selection.map((id) => session.document.nodes.get(id))
+      .filter((node): node is SceneNode => node !== undefined);
+    if (nodes.length === 0) return;
+
+    // Straight into the document rather than via the clipboard, so duplicating
+    // does not throw away whatever was copied earlier.
+    const copies = cloneNodes(nodes);
+    get().run(new AddNodesCommand(copies, `Duplicate ${copies.length}`));
+    set({
+      selection: copies.map((node) => node.id),
+      statusMessage: `Duplicated ${copies.length} item${copies.length === 1 ? '' : 's'}`,
+    });
+  },
+
+  /**
+   * Transforms the selection about its own centre.
+   *
+   * The pivot comes from the document rather than the camera, so a rotation
+   * means the same thing however the view happens to be pointing.
+   */
+  transformSelection: (build, label) => {
+    const doc = session.document;
+    const ids = get().selection.filter((id) => {
+      const node = doc.nodes.get(id);
+      return node !== undefined && isNodeEditable(doc, node);
+    });
+    if (ids.length === 0) return;
+
+    const pivot = nodesCentre(doc, ids);
+    if (!pivot) return;
+
+    get().run(new TransformNodesCommand(ids, build(pivot), label));
+  },
+
+  rotateSelection: (axis, radians) => {
+    const direction: Vec3 =
+      axis === 'x' ? { x: 1, y: 0, z: 0 } : axis === 'y' ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+    get().transformSelection((pivot) => rotation(direction, radians, pivot), 'Rotate');
+  },
+
+  scaleSelection: (factor) => {
+    // A zero or negative factor collapses the geometry into a plane or turns
+    // it inside out; neither is what a scale control is for.
+    if (!Number.isFinite(factor) || factor <= 0) return;
+    get().transformSelection((pivot) => scaling(factor, pivot), 'Scale');
+  },
+
+  mirrorSelection: (axis) => {
+    const normal: Vec3 =
+      axis === 'x' ? { x: 1, y: 0, z: 0 } : axis === 'y' ? { x: 0, y: 1, z: 0 } : { x: 0, y: 0, z: 1 };
+    get().transformSelection((pivot) => mirrorAbout(normal, pivot), 'Mirror');
+  },
+
+  /** Moves the selection so its centre sits at an exact coordinate. */
+  placeSelection: (axis, metres) => {
+    const doc = session.document;
+    const ids = get().selection.filter((id) => {
+      const node = doc.nodes.get(id);
+      return node !== undefined && isNodeEditable(doc, node);
+    });
+    if (ids.length === 0) return;
+
+    const centre = nodesCentre(doc, ids);
+    if (!centre) return;
+
+    const delta: Vec3 = { x: 0, y: 0, z: 0 };
+    delta[axis] = metres - centre[axis];
+    get().run(new TranslateNodesCommand(ids, delta));
+  },
+
+  groupSelection: () => {
+    const { selection } = get();
+    if (selection.length < 2) {
+      set({ statusMessage: 'Select two or more items to group.' });
+      return;
+    }
+    get().run(new GroupNodesCommand([...selection], createId('group')));
+    set({ statusMessage: `Grouped ${selection.length} items` });
+  },
+
+  ungroupSelection: () => {
+    const { selection } = get();
+    if (selection.length === 0) return;
+    get().run(new UngroupNodesCommand([...selection]));
+    set({ statusMessage: 'Ungrouped' });
+  },
+
+  setNodeFlags: (ids, patch, label) => {
+    if (ids.length === 0) return;
+    get().run(new SetNodeFlagsCommand([...ids], patch, label));
+  },
+
+  renameNode: (id, name) => {
+    const trimmed = name.trim();
+    const node = session.document.nodes.get(id);
+    if (!node || !trimmed || trimmed === node.label) return;
+    get().setNodeFlags([id], { label: trimmed }, 'Rename object');
+  },
+
+  toggleNodeHidden: (id) => {
+    const node = session.document.nodes.get(id);
+    if (!node) return;
+    get().setNodeFlags([id], { hidden: !node.hidden }, 'Hide object');
+    // Something hidden cannot stay selected, or the toolbar hangs over nothing.
+    if (!node.hidden) {
+      set((state) => ({ selection: state.selection.filter((existing) => existing !== id) }));
+    }
+  },
+
+  toggleNodeLocked: (id) => {
+    const node = session.document.nodes.get(id);
+    if (!node) return;
+    get().setNodeFlags([id], { locked: !node.locked }, 'Lock object');
+  },
+
+  setEyedropper: (eyedropper) => set({ eyedropper }),
+
+  /** Takes the colour of an existing node and makes it the current colour. */
+  pickColorAt: (id) => {
+    const node = session.document.nodes.get(id);
+    set({ eyedropper: false });
+    if (!node) return;
+
+    // Straight to setStyle so the colour joins the recent list like any other,
+    // but with the selection cleared first so it does not restyle what it just
+    // sampled from.
+    set({ selection: [] });
+    get().setStyle({ color: node.style.color });
+    set({ statusMessage: `Picked ${node.style.color}` });
+  },
+
+  reorderLayer: (layerId, direction) => {
+    const doc = session.document;
+    const index = doc.layers.findIndex((layer) => layer.id === layerId);
+    const to = index + direction;
+    if (index < 0 || to < 0 || to >= doc.layers.length) return;
+    get().run(new ReorderLayerCommand(layerId, to));
   },
 
   mergeLayerDown: (layerId) => {

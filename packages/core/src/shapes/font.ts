@@ -8,8 +8,8 @@
  * a second rendering approach.
  *
  * Coordinates sit in an em box: baseline at y = 0, cap height at y = 1, glyphs
- * 0.55 wide. This is a capitals-only technical face, as CAD annotation fonts
- * usually are — lowercase input is drawn in capitals rather than dropped.
+ * 0.55 wide. Lowercase sits at an x-height of 0.62 with descenders to -0.28,
+ * which is what makes it read as lowercase rather than as small capitals.
  */
 
 export type Glyph = number[][][];
@@ -18,6 +18,11 @@ export type Glyph = number[][][];
 export const ADVANCE = 0.75;
 /** Distance between baselines, in em. */
 export const LINE_HEIGHT = 1.5;
+
+/** Top of a lowercase letter with no ascender, in em. */
+const X = 0.62;
+/** How far a descender drops below the baseline, in em. */
+const DESC = -0.28;
 
 const O_SHAPE: number[][] = [
   [0.15, 1],
@@ -39,6 +44,53 @@ const P_BOWL: number[][] = [
   [0.55, 0.65],
   [0.4, 0.5],
   [0, 0.5],
+];
+
+/** The bowl of b and p — hung off a stem on the left. */
+const BOWL_LEFT: number[][] = [
+  [0, 0.5],
+  [0.15, X],
+  [0.4, X],
+  [0.55, 0.5],
+  [0.55, 0.12],
+  [0.4, 0],
+  [0.15, 0],
+  [0, 0.12],
+];
+
+/** The bowl of a, d, g and q — hung off a stem on the right. */
+const BOWL_RIGHT: number[][] = [
+  [0.55, 0.5],
+  [0.4, X],
+  [0.15, X],
+  [0, 0.5],
+  [0, 0.12],
+  [0.15, 0],
+  [0.4, 0],
+  [0.55, 0.12],
+];
+
+/** The arch of h and n. */
+const SHOULDER: number[][] = [
+  [0, 0.5],
+  [0.15, X],
+  [0.4, X],
+  [0.55, 0.5],
+  [0.55, 0],
+];
+
+/**
+ * The dot on an i or j.
+ *
+ * A square rather than a point: a zero-length polyline has no direction to
+ * sweep along and would produce no geometry at all.
+ */
+const DOT: number[][] = [
+  [0.2, 0.8],
+  [0.32, 0.8],
+  [0.32, 0.92],
+  [0.2, 0.92],
+  [0.2, 0.8],
 ];
 
 const GLYPHS: Record<string, Glyph> = {
@@ -613,6 +665,271 @@ const GLYPHS: Record<string, Glyph> = {
       [0.2, 0.78],
     ],
   ],
+
+  // Lowercase. Built from the same parts as the capitals — a bowl, a stem, a
+  // shoulder — so the two weights sit together rather than looking like two
+  // fonts that happen to share a file.
+  a: [
+    [
+      [0.55, X],
+      [0.55, 0],
+    ],
+    BOWL_RIGHT,
+  ],
+  b: [
+    [
+      [0, 1],
+      [0, 0],
+    ],
+    BOWL_LEFT,
+  ],
+  c: [
+    [
+      [0.55, 0.5],
+      [0.4, X],
+      [0.15, X],
+      [0, 0.5],
+      [0, 0.12],
+      [0.15, 0],
+      [0.4, 0],
+      [0.55, 0.12],
+    ],
+  ],
+  d: [
+    [
+      [0.55, 1],
+      [0.55, 0],
+    ],
+    BOWL_RIGHT,
+  ],
+  e: [
+    [
+      [0, 0.31],
+      [0.55, 0.31],
+      [0.55, 0.5],
+      [0.4, X],
+      [0.15, X],
+      [0, 0.5],
+      [0, 0.12],
+      [0.15, 0],
+      [0.4, 0],
+      [0.55, 0.12],
+    ],
+  ],
+  f: [
+    [
+      [0.5, 0.95],
+      [0.35, 1],
+      [0.2, 0.88],
+      [0.2, 0],
+    ],
+    [
+      [0.02, X],
+      [0.45, X],
+    ],
+  ],
+  g: [
+    BOWL_RIGHT,
+    [
+      [0.55, X],
+      [0.55, -0.15],
+      [0.4, DESC],
+      [0.15, DESC],
+      [0.02, -0.2],
+    ],
+  ],
+  h: [
+    [
+      [0, 1],
+      [0, 0],
+    ],
+    SHOULDER,
+  ],
+  i: [
+    DOT,
+    [
+      [0.25, X],
+      [0.25, 0],
+    ],
+  ],
+  j: [
+    DOT,
+    [
+      [0.35, X],
+      [0.35, -0.15],
+      [0.22, DESC],
+      [0.07, -0.24],
+    ],
+  ],
+  k: [
+    [
+      [0, 1],
+      [0, 0],
+    ],
+    [
+      [0.5, X],
+      [0.05, 0.24],
+    ],
+    [
+      [0.2, 0.36],
+      [0.55, 0],
+    ],
+  ],
+  l: [
+    [
+      [0.18, 1],
+      [0.18, 0.12],
+      [0.32, 0],
+    ],
+  ],
+  m: [
+    [
+      [0, 0],
+      [0, X],
+    ],
+    [
+      [0, 0.5],
+      [0.08, X],
+      [0.19, X],
+      [0.275, 0.5],
+      [0.275, 0],
+    ],
+    [
+      [0.275, 0.5],
+      [0.36, X],
+      [0.47, X],
+      [0.55, 0.5],
+      [0.55, 0],
+    ],
+  ],
+  n: [
+    [
+      [0, 0],
+      [0, X],
+    ],
+    SHOULDER,
+  ],
+  o: [
+    [
+      [0.15, X],
+      [0.4, X],
+      [0.55, 0.5],
+      [0.55, 0.12],
+      [0.4, 0],
+      [0.15, 0],
+      [0, 0.12],
+      [0, 0.5],
+      [0.15, X],
+    ],
+  ],
+  p: [
+    [
+      [0, X],
+      [0, DESC],
+    ],
+    BOWL_LEFT,
+  ],
+  q: [
+    [
+      [0.55, X],
+      [0.55, DESC],
+    ],
+    BOWL_RIGHT,
+  ],
+  r: [
+    [
+      [0, 0],
+      [0, X],
+    ],
+    [
+      [0, 0.48],
+      [0.15, X],
+      [0.4, 0.6],
+    ],
+  ],
+  s: [
+    [
+      [0.52, 0.55],
+      [0.38, X],
+      [0.14, X],
+      [0, 0.52],
+      [0.05, 0.38],
+      [0.45, 0.28],
+      [0.52, 0.14],
+      [0.38, 0],
+      [0.14, 0],
+      [0.02, 0.08],
+    ],
+  ],
+  t: [
+    [
+      [0.2, 1],
+      [0.2, 0.14],
+      [0.32, 0],
+      [0.48, 0.04],
+    ],
+    [
+      [0.02, X],
+      [0.42, X],
+    ],
+  ],
+  u: [
+    [
+      [0, X],
+      [0, 0.14],
+      [0.14, 0],
+      [0.4, 0],
+      [0.55, 0.14],
+    ],
+    [
+      [0.55, X],
+      [0.55, 0],
+    ],
+  ],
+  v: [
+    [
+      [0, X],
+      [0.275, 0],
+      [0.55, X],
+    ],
+  ],
+  w: [
+    [
+      [0, X],
+      [0.12, 0],
+      [0.275, 0.45],
+      [0.43, 0],
+      [0.55, X],
+    ],
+  ],
+  x: [
+    [
+      [0, X],
+      [0.55, 0],
+    ],
+    [
+      [0.55, X],
+      [0, 0],
+    ],
+  ],
+  y: [
+    [
+      [0, X],
+      [0.3, 0.06],
+    ],
+    [
+      [0.55, X],
+      [0.16, DESC],
+    ],
+  ],
+  z: [
+    [
+      [0, X],
+      [0.55, X],
+      [0, 0],
+      [0.55, 0],
+    ],
+  ],
 };
 
 /** Drawn for a character the font does not cover, rather than dropping it. */
@@ -627,10 +944,10 @@ const TOFU: Glyph = [
 ];
 
 export function glyphFor(character: string): Glyph {
-  // Capitals-only face: lowercase is drawn in capitals rather than dropped.
-  const upper = character.toUpperCase();
-  return GLYPHS[upper] ?? TOFU;
+  // Exact match first. Falling back to the capital covers accented letters and
+  // anything else the lowercase set does not reach, which still beats a tofu.
+  return GLYPHS[character] ?? GLYPHS[character.toUpperCase()] ?? TOFU;
 }
 
 export const hasGlyph = (character: string): boolean =>
-  character.toUpperCase() in GLYPHS;
+  character in GLYPHS || character.toUpperCase() in GLYPHS;

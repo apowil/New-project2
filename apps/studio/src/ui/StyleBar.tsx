@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+import { formatLength } from '@wisp/core';
+
 import { useStore } from '../state/store.js';
 import { BRUSHES, matchBrush } from '../tools/brushes.js';
 import { ColorPicker } from './ColorPicker.js';
@@ -25,6 +27,7 @@ export function StyleBar() {
   const setStyle = useStore((state) => state.setStyle);
   const applyBrush = useStore((state) => state.applyBrush);
   const recentColors = useStore((state) => state.recentColors);
+  const unit = useStore((state) => state.unit);
 
   const [openPanel, setOpenPanel] = useState<'color' | 'brush' | null>(null);
   const activeBrush = matchBrush(style);
@@ -133,7 +136,7 @@ export function StyleBar() {
         min={0.008}
         max={0.4}
         step={0.002}
-        format={(v) => `${(v * 100).toFixed(1)} cm`}
+        format={(v) => formatLength(v, unit)}
         onChange={(width) => setStyle({ width })}
       />
     </div>

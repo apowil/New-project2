@@ -190,6 +190,22 @@ export const RenameIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const ShapesIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <rect x="3" y="12" width="9" height="9" rx="1" />
+    <circle cx="16.5" cy="16.5" r="4.5" />
+    <path d="M8.5 3l4.5 7H4z" />
+  </svg>
+);
+
+export const TextIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M5 6V4h14v2" />
+    <path d="M12 4v16" />
+    <path d="M9 20h6" />
+  </svg>
+);
+
 export const ScissorsIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} width={18} height={18} aria-hidden="true">
     <circle cx="6" cy="18" r="2.5" />

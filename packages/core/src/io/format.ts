@@ -51,6 +51,8 @@ export interface StrokeManifestNode {
   createdAt: number;
   style: Record<string, unknown>;
   planeNormal: { x: number; y: number; z: number };
+  /** Present only for shapes drawn with a shape tool. */
+  shape?: unknown;
   samples: SampleRange;
 }
 

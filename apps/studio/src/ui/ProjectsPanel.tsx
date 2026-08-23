@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { session, useStore } from '../state/store.js';
+import { type ImageFormat } from '../storage/exportImage.js';
 import {
   CloseIcon,
   CopyIcon,
@@ -30,6 +31,7 @@ export function ProjectsPanel() {
   const exportSketch = useStore((state) => state.exportSketch);
   const importSketch = useStore((state) => state.importSketch);
   const renameProject = useStore((state) => state.renameProject);
+  const exportImage = useStore((state) => state.exportImage);
   const duplicateProject = useStore((state) => state.duplicateProject);
   const persistent = useStore((state) => state.storageIsPersistent);
 
@@ -70,15 +72,7 @@ export function ProjectsPanel() {
             Import
           </button>
 
-          <button
-            type="button"
-            onClick={exportSketch}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-secondary transition-colors hover:bg-line/70"
-            title="Save the current sketch as a .wisp file"
-          >
-            <DownloadIcon />
-            Export
-          </button>
+          <ExportMenu onWisp={exportSketch} onImage={(format) => void exportImage(format)} />
 
           <button
             type="button"
@@ -205,6 +199,79 @@ export function ProjectsPanel() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Export as a file.
+ *
+ * `.wisp` keeps everything and can be reopened; the image formats are
+ * one-way. PNG and JPEG capture the view as pixels at twice the screen size,
+ * SVG re-renders the same scene as vector polygons.
+ */
+function ExportMenu({
+  onWisp,
+  onImage,
+}: {
+  onWisp: () => void;
+  onImage: (format: ImageFormat) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close, true);
+    return () => document.removeEventListener('pointerdown', close, true);
+  }, [open]);
+
+  const choose = (run: () => void) => {
+    setOpen(false);
+    run();
+  };
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-secondary transition-colors hover:bg-line/70"
+        title="Save this sketch to a file"
+      >
+        <DownloadIcon />
+        Export
+      </button>
+
+      {open && (
+        <div
+          className="panel absolute right-0 top-full z-50 mt-1.5 flex w-48 flex-col gap-0.5 p-1.5"
+          role="dialog"
+          aria-label="Export"
+        >
+          <button type="button" className="chip text-left" onClick={() => choose(onWisp)}>
+            Wisp file
+            <span className="block text-[11px] text-muted">Reopenable, keeps everything</span>
+          </button>
+          {(['png', 'jpg', 'svg'] as ImageFormat[]).map((format) => (
+            <button
+              key={format}
+              type="button"
+              className="chip text-left uppercase"
+              onClick={() => choose(() => onImage(format))}
+            >
+              {format}
+              <span className="block normal-case text-[11px] text-muted">
+                {format === 'svg' ? 'Vector, from the same scene' : 'Picture of the current view'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

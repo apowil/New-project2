@@ -25,7 +25,10 @@ import {
   type MirrorAxes,
   type OpRunner,
   type SketchDocument,
+  type ShapeKind,
   type StrokeStyle,
+  type Unit,
+  withDimension,
 } from '@wisp/core';
 
 import { DEFAULT_PLANE_STATE, type PlaneMode, type PlaneState } from '../viewport/sketchPlane.js';
@@ -33,9 +36,15 @@ import { type TouchIntent } from '../viewport/gestures.js';
 import { AutoSaver, readLastOpened, rememberLastOpened, type SaveState } from '../storage/autosave.js';
 import { getProjectStore, type ProjectMeta } from '../storage/projectStore.js';
 import { downloadDocument, pickDocumentFile, readDocumentFile } from '../storage/files.js';
+import {
+  IMAGE_FORMAT_LABELS,
+  downloadExport,
+  type ImageFormat,
+} from '../storage/exportImage.js';
 import { pickImageFile, readImageAsDataUrl } from '../storage/images.js';
 import { DEFAULT_BRUSH_ID, findBrush, styleForBrush } from '../tools/brushes.js';
 import { BOOLEAN_LABELS, evaluateBoolean, type BooleanOp } from '../tools/booleans.js';
+import { rebuildShape } from '../tools/shapeTool.js';
 import {
   SCENE_THEMES,
   applyTheme,
@@ -45,8 +54,9 @@ import {
   type ResolvedTheme,
   type ThemePreference,
 } from './theme.js';
+import { readUnit, writeUnit } from './unitPreference.js';
 
-export type ToolId = 'draw' | 'erase' | 'plane' | 'select';
+export type ToolId = 'draw' | 'erase' | 'plane' | 'select' | 'shape' | 'text';
 
 /**
  * A tracing image floating over the canvas.
@@ -108,6 +118,8 @@ export interface ViewActions {
   nudge: (deltaTheta: number, deltaPhi: number) => void;
   zoom: (factor: number) => void;
   frameAll: () => void;
+  renderImage: (format: 'png' | 'jpg', scale: number) => string;
+  renderSvg: () => Promise<string>;
 }
 
 let viewActions: ViewActions | null = null;
@@ -152,6 +164,17 @@ interface AppState {
 
   themePreference: ThemePreference;
   resolvedTheme: ResolvedTheme;
+  /** Display unit for every measurement. Presentation only — never geometry. */
+  unit: Unit;
+
+  shapeKind: ShapeKind;
+  polygonSides: number;
+  /** Live measurements of the shape under the pointer, in metres. */
+  shapeReadout: Array<{ label: string; value: number }> | null;
+  /** Cap height for new text, in metres. */
+  textSize: number;
+  /** Set while the text tool waits for something to be typed. */
+  textPrompt: { x: number; y: number } | null;
   recentColors: string[];
   reference: ReferenceImage | null;
 
@@ -177,6 +200,15 @@ interface AppState {
 
   setThemePreference: (preference: ThemePreference) => void;
   syncResolvedTheme: () => void;
+  setUnit: (unit: Unit) => void;
+  exportImage: (format: ImageFormat, scale?: number) => Promise<void>;
+
+  setShapeKind: (kind: ShapeKind) => void;
+  setPolygonSides: (sides: number) => void;
+  setShapeReadout: (readout: Array<{ label: string; value: number }> | null) => void;
+  setTextSize: (metres: number) => void;
+  setTextPrompt: (at: { x: number; y: number } | null) => void;
+  editShapeDimension: (nodeId: string, label: string, metres: number) => void;
 
   importReference: () => Promise<void>;
   updateReference: (patch: Partial<ReferenceImage>) => void;
@@ -255,6 +287,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   themePreference: readThemePreference(),
   resolvedTheme: resolveTheme(readThemePreference()),
+  unit: readUnit(),
+  shapeKind: 'rectangle',
+  polygonSides: 6,
+  shapeReadout: null,
+  textSize: 0.15,
+  textPrompt: null,
   recentColors: [],
   reference: null,
   selection: [],
@@ -293,6 +331,52 @@ export const useStore = create<AppState>((set, get) => ({
 
   toggleMirror: (axis) =>
     set((state) => ({ mirror: { ...state.mirror, [axis]: !state.mirror[axis] } })),
+
+  setShapeKind: (shapeKind) => set({ shapeKind }),
+  setPolygonSides: (polygonSides) => set({ polygonSides: Math.max(3, Math.round(polygonSides)) }),
+  setShapeReadout: (shapeReadout) => set({ shapeReadout }),
+  setTextSize: (textSize) => set({ textSize: Math.max(textSize, 1e-4) }),
+  setTextPrompt: (textPrompt) => set({ textPrompt }),
+
+  /**
+   * Applies a typed dimension to a shape that was drawn earlier.
+   *
+   * Only possible because the shape kept its parameters and the plane it was
+   * laid out on; a freehand stroke has neither and is left alone.
+   */
+  editShapeDimension: (nodeId, label, metres) => {
+    const node = session.document.nodes.get(nodeId);
+    if (!node || node.type !== 'stroke' || !node.shape) return;
+
+    const rebuilt = rebuildShape(node, withDimension(node.shape.params, label, metres));
+    if (!rebuilt) return;
+
+    get().run(new ReplaceNodesCommand([nodeId], [rebuilt], `Set ${label.toLowerCase()}`));
+    set({ selection: [rebuilt.id] });
+  },
+
+  setUnit: (unit) => {
+    writeUnit(unit);
+    set({ unit });
+  },
+
+  exportImage: async (format, scale = 2) => {
+    const actions = getViewActions();
+    if (!actions) return;
+
+    try {
+      const payload =
+        format === 'svg'
+          ? await actions.renderSvg()
+          : actions.renderImage(format === 'jpg' ? 'jpg' : 'png', scale);
+
+      downloadExport(session.document.name, format, payload);
+      set({ statusMessage: `Exported ${IMAGE_FORMAT_LABELS[format]}` });
+    } catch (error) {
+      console.error('Image export failed', error);
+      set({ statusMessage: describeError(error, 'That export could not be made.') });
+    }
+  },
 
   setThemePreference: (preference) => {
     writeThemePreference(preference);

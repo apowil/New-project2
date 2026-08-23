@@ -13,6 +13,8 @@ import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
 import { HintBar } from './ui/HintBar.js';
 import { Marquee, SelectionContextBar } from './ui/SelectionContextBar.js';
+import { ShapePanel } from './ui/ShapePanel.js';
+import { TextPrompt } from './ui/TextPrompt.js';
 import { StatusToast } from './ui/StatusToast.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
@@ -22,6 +24,7 @@ export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<Viewport | null>(null);
   const routerRef = useRef<InputRouter | null>(null);
+  const controllerRef = useRef<ToolController | null>(null);
 
   const revision = useStore((state) => state.revision);
   const documentEpoch = useStore((state) => state.documentEpoch);
@@ -92,6 +95,8 @@ export function App() {
         viewport.camera.frame(bounds);
         viewport.requestRender();
       },
+      renderImage: (format, scale) => viewport.renderImage(format, scale),
+      renderSvg: () => viewport.renderSvg(),
     });
     const detachAutoSave = autoSaver.attach();
 
@@ -100,6 +105,7 @@ export function App() {
 
     viewportRef.current = viewport;
     routerRef.current = router;
+    controllerRef.current = controller;
 
     // Reopen whatever was last being drawn.
     void useStore.getState().boot();
@@ -112,6 +118,7 @@ export function App() {
       viewport.dispose();
       viewportRef.current = null;
       routerRef.current = null;
+      controllerRef.current = null;
     };
   }, []);
 
@@ -238,7 +245,18 @@ export function App() {
         return;
       }
 
+      if (event.key === 'Enter' && controllerRef.current?.isChainingShape) {
+        event.preventDefault();
+        controllerRef.current.finishShape(false);
+        return;
+      }
+
       if (event.key === 'Escape') {
+        // A half-drawn polyline is what Escape should abandon first.
+        if (controllerRef.current?.isChainingShape) {
+          controllerRef.current.finishShape(false);
+          return;
+        }
         store.clearSelection();
         return;
       }
@@ -252,6 +270,12 @@ export function App() {
           break;
         case 's':
           store.setTool('select');
+          break;
+        case 'r':
+          store.setTool('shape');
+          break;
+        case 't':
+          store.setTool('text');
           break;
         case 'p':
           store.setTool('plane');
@@ -298,13 +322,16 @@ export function App() {
 
         {/* Panels follow the tool: what is on screen is what the current tool
             can actually do, rather than everything at once. */}
-        {(tool === 'draw' || tool === 'plane') && (
-          <div className="absolute bottom-4 left-4">
+        {(tool === 'draw' || tool === 'plane' || tool === 'shape') && (
+          <div className="absolute bottom-4 left-4 flex flex-col gap-3">
+            {tool === 'shape' && (
+              <ShapePanel onFinish={(closed) => controllerRef.current?.finishShape(closed)} />
+            )}
             <PlanePanel />
           </div>
         )}
 
-        {tool === 'draw' && (
+        {(tool === 'draw' || tool === 'shape' || tool === 'text') && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
             <StyleBar />
           </div>
@@ -314,6 +341,11 @@ export function App() {
         <HintBar />
 
         <Marquee />
+        <TextPrompt
+          onPlace={(x, y, text, size) =>
+            controllerRef.current?.placeText(x, y, text, size) ?? false
+          }
+        />
         <ReferenceOverlay />
         <StatusToast />
         <ProjectsPanel />

@@ -4,6 +4,7 @@ import {
   TranslateNodesCommand,
   makePlane,
   raycastPlane,
+  toLocal,
   translateNodes,
   type Plane,
   type Vec3,
@@ -13,6 +14,9 @@ import { type GestureHandlers, type StrokeInput } from '../viewport/gestures.js'
 import { type Viewport } from '../viewport/viewport.js';
 import { session, useStore } from '../state/store.js';
 import { DrawTool } from './drawTool.js';
+import { ShapeTool } from './shapeTool.js';
+import { TextTool } from './textTool.js';
+import { resolvePlane } from '../viewport/sketchPlane.js';
 
 /**
  * Routes gestures to whichever tool is active. Tools stay dumb — this is the
@@ -20,9 +24,13 @@ import { DrawTool } from './drawTool.js';
  */
 export class ToolController implements GestureHandlers {
   readonly draw: DrawTool;
+  readonly shape: ShapeTool;
+  readonly text: TextTool;
 
   constructor(private readonly viewport: Viewport) {
     this.draw = new DrawTool(viewport);
+    this.shape = new ShapeTool(viewport);
+    this.text = new TextTool(viewport);
   }
 
   private marqueeStart: { x: number; y: number; additive: boolean } | null = null;
@@ -54,6 +62,13 @@ export class ToolController implements GestureHandlers {
       case 'plane':
         this.replantPlaneAt(input);
         break;
+      case 'shape':
+        this.shape.begin(input);
+        break;
+      case 'text':
+        // The prompt takes over from here; the tool only marks the spot.
+        useStore.getState().setTextPrompt({ x: input.x, y: input.y });
+        break;
       case 'select': {
         const store = useStore.getState();
         const hit = this.viewport.pickSurface(input.x, input.y);
@@ -75,6 +90,8 @@ export class ToolController implements GestureHandlers {
 
     if (tool === 'draw') {
       this.draw.extend(inputs);
+    } else if (tool === 'shape') {
+      this.shape.extend(inputs);
     } else if (tool === 'erase') {
       // Dragging the eraser keeps deleting whatever it passes over.
       if (last) this.eraseAt(last);
@@ -97,6 +114,11 @@ export class ToolController implements GestureHandlers {
 
     if (store.tool === 'draw') {
       void this.draw.end();
+      return;
+    }
+
+    if (store.tool === 'shape') {
+      this.shape.end(input);
       return;
     }
 
@@ -129,6 +151,7 @@ export class ToolController implements GestureHandlers {
 
   onStrokeCancel = (): void => {
     this.draw.cancel();
+    this.shape.cancel();
     this.marqueeStart = null;
     if (this.moveState) this.endMove();
     useStore.getState().setMarquee(null);
@@ -221,8 +244,9 @@ export class ToolController implements GestureHandlers {
     return { x: centre.x, y: centre.y, z: centre.z };
   }
 
-  onHover = (): void => {
-    // Reserved for the S Pen aiming preview.
+  onHover = (input: StrokeInput | null): void => {
+    // A chained polyline previews its next segment as the pen hovers.
+    if (input && useStore.getState().tool === 'shape') this.shape.hover(input);
   };
 
   onCameraChange = (): void => {
@@ -247,6 +271,33 @@ export class ToolController implements GestureHandlers {
   tick = (): void => {
     this.draw.tick();
   };
+
+  /** Places text at the point the text tool marked. */
+  placeText(screenX: number, screenY: number, text: string, size: number): boolean {
+    const store = useStore.getState();
+    const plane = resolvePlane(store.plane, this.viewport.camera);
+
+    const ndc = this.viewport.toNdc(screenX, screenY);
+    const ray = this.viewport.camera.ray(ndc.x, ndc.y);
+    const hit = raycastPlane(
+      plane,
+      { x: ray.origin.x, y: ray.origin.y, z: ray.origin.z },
+      { x: ray.direction.x, y: ray.direction.y, z: ray.direction.z },
+    );
+    if (!hit) return false;
+
+    const anchor = toLocal(plane, hit);
+    return this.text.place({ text, size, u: anchor.u, v: anchor.v }, plane);
+  }
+
+  /** Finishes a polyline or spline that is waiting for more points. */
+  finishShape(closed = false): void {
+    this.shape.finishChain(closed);
+  }
+
+  get isChainingShape(): boolean {
+    return this.shape.isChaining;
+  }
 
   private eraseAt(input: StrokeInput): void {
     const hit = this.viewport.pickSurface(input.x, input.y);

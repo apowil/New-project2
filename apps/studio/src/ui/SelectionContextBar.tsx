@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useStore } from '../state/store.js';
+import { shapeDimensions } from '@wisp/core';
+
+import { session, useStore } from '../state/store.js';
 import { BOOLEAN_LABELS, type BooleanOp } from '../tools/booleans.js';
 import { CopyIcon, ScissorsIcon, StackIcon, TrashIcon } from './Icons.js';
+import { LengthField } from './LengthField.js';
 
 /**
  * Actions follow the selection instead of living in a corner.
@@ -33,7 +36,10 @@ export function SelectionContextBar() {
   const deleteSelection = useStore((state) => state.deleteSelection);
   const moveSelectionToLayer = useStore((state) => state.moveSelectionToLayer);
 
-  const [menu, setMenu] = useState<'combine' | 'layer' | null>(null);
+  const unit = useStore((state) => state.unit);
+  const editShapeDimension = useStore((state) => state.editShapeDimension);
+
+  const [menu, setMenu] = useState<'combine' | 'layer' | 'size' | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -52,6 +58,14 @@ export function SelectionContextBar() {
 
   const count = selection.length;
   const enoughForBoolean = count >= 2;
+
+  // A shape drawn with a shape tool kept its parameters, so it can still be
+  // resized by typing. One at a time: editing several at once would need a
+  // shared meaning for "width" that these shapes do not have.
+  const soleNode = count === 1 ? session.document.nodes.get(selection[0]!) : undefined;
+  const shape =
+    soleNode && soleNode.type === 'stroke' && soleNode.shape ? soleNode.shape.params : null;
+  const dimensions = shape ? shapeDimensions(shape) : [];
 
   return (
     <div
@@ -94,6 +108,17 @@ export function SelectionContextBar() {
           <span className="text-xs">Combine</span>
         </BarButton>
 
+        {dimensions.length > 0 && (
+          <BarButton
+            label="Size"
+            onClick={() => setMenu((open) => (open === 'size' ? null : 'size'))}
+            active={menu === 'size'}
+            title="Type exact dimensions"
+          >
+            <span className="text-xs">Size</span>
+          </BarButton>
+        )}
+
         <BarButton
           label="Layer"
           onClick={() => setMenu((open) => (open === 'layer' ? null : 'layer'))}
@@ -125,6 +150,22 @@ export function SelectionContextBar() {
             >
               {BOOLEAN_LABELS[op]}
             </button>
+          ))}
+        </div>
+      )}
+
+      {menu === 'size' && shape && (
+        <div className="panel mt-1.5 flex w-56 flex-col gap-2 p-2.5">
+          <span className="section-label">{shape.kind}</span>
+          {dimensions.map(({ label, value }) => (
+            <LengthField
+              key={label}
+              label={label}
+              value={value}
+              unit={unit}
+              min={1e-5}
+              onCommit={(metres) => editShapeDimension(selection[0]!, label, metres)}
+            />
           ))}
         </div>
       )}

@@ -173,8 +173,10 @@ test.describe('persistence', () => {
     // header and match exactly.
     const dialog = page.getByRole('dialog', { name: 'Sketches' });
 
-    const downloadPromise = page.waitForEvent('download');
+    // Export is a menu now: the button opens it, the format is chosen inside.
     await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: /^Wisp file/ }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('Exported study.wisp');
     const filePath = await download.path();

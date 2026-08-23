@@ -69,6 +69,7 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
         createdAt: node.createdAt,
         style: { ...node.style },
         planeNormal: { ...node.planeNormal },
+        ...(node.shape ? { shape: node.shape } : {}),
         samples: { byteOffset: binaryBytes, count: node.samples.length },
       });
       strokes.push(node);
@@ -281,6 +282,8 @@ function readStroke(
     style: readStyle(entry.style),
     planeNormal: readVec3(entry.planeNormal, vec3(0, 1, 0)),
     createdAt: Number(entry.createdAt) || Date.now(),
+    // Shape parameters are plain JSON; a file without them loads as freehand.
+    ...(entry.shape ? { shape: entry.shape as StrokeNode['shape'] } : {}),
   };
 }
 

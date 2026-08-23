@@ -106,6 +106,29 @@ surface no longer corresponds to any centreline, so it cannot be re-swept at a
 different width afterwards. The file format carries baked geometry alongside
 stroke samples, and its version went to 2.
 
+## Stage 2.2 — Units, shapes, text and image export ✅
+
+- **Units** — mm, cm, m, inches or feet, chosen once and applied to every
+  measurement. One scene unit stays one metre internally: switching units
+  changes what is *shown*, never the geometry, so a sketch drawn in mm and
+  reopened in inches is still the same size. Typed fields accept an explicit
+  suffix, so "5mm" means five millimetres even when the app is set to metres.
+- **Shape tools** — line, rectangle, circle and polygon are dragged; polyline
+  and spline are tapped point by point and finished with Enter. Each is
+  generated as a centreline and committed as an ordinary stroke, so it sweeps,
+  moves, combines and exports like anything else.
+- **Dimensions** — measurements appear live while a shape is being dragged,
+  and a finished shape keeps its parameters, so it can be resized later by
+  typing an exact width, height, radius or length.
+- **Text** — a single-stroke technical face, drawn with the current brush and
+  merged into one object. Three.js ships no font data, so extruded outline
+  text would have meant bundling a typeface; stroke glyphs suit a sketch app
+  better anyway and inherit every existing tool. Capitals only, as CAD
+  annotation faces usually are — lowercase input is drawn in capitals.
+- **Image export** — PNG and JPEG from the framebuffer at twice screen size,
+  and SVG re-rendered through Three's SVGRenderer as genuine vector polygons
+  rather than a traced bitmap.
+
 ---
 
 ## Still to build
@@ -190,7 +213,13 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
 - A stroke's shape cannot be edited after it is drawn — it can be moved,
   combined and deleted, but not reshaped (liquify, stage 2.5)
 - Selection moves but does not rotate or scale yet
-- No export beyond `.wisp` — no glTF, OBJ or image output yet
+- No 3D model export yet — PNG, JPEG and SVG work, but glTF, OBJ and STL do
+  not (stage 4)
+- SVG export is flat-shaded polygons, one per triangle: true vector, but large
+  for a dense sketch and without the lighting of the WebGL view
+- The stroke font is capitals only, and shapes mirrored by symmetry lose their
+  editable dimensions, since reflected parameters would need a reflected plane
+  to stay honest
 - Booleans run on the main thread; a very dense selection will pause the UI
   for a moment. This is the first operation that should move to the compute
   link in stage 5.

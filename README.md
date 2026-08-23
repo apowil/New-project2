@@ -48,7 +48,8 @@ npm run typecheck
 Press and hold with a finger — or middle-click — to re-centre the orbit on
 whatever is under it.
 
-Keys: `D` draw · `S` select · `E` erase · `P` place sketch plane · `F` frame
+Keys: `D` draw · `S` select · `R` shapes · `T` text · `E` erase · `P` place
+sketch plane · `F` frame
 everything · `[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo ·
 `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut, paste · `Ctrl+A` select the layer ·
 `Del` delete · `Esc` deselect · `Ctrl+S` save · `Ctrl+O` sketches.
@@ -74,6 +75,11 @@ it, so you can draw directly onto existing geometry.
 - Boolean operations: merge, subtract, intersect, and a non-cutting combine
 - Layers: merge down, duplicate with contents, move a selection between them
 - Six brushes: round brush, flat brush, pen, pencil, and water markers
+- Shape tools: line, rectangle, circle, polygon, polyline and spline, with
+  live measurements and exact sizes you can type afterwards
+- Text in a single-stroke technical face, drawn with the current brush
+- Units in mm, cm, m, inches or feet — display only, never the geometry
+- Export to PNG, JPEG and SVG, as well as the reopenable `.wisp` file
 - Full colour picker with recent colours, plus quick swatches
 - Light and dark themes, following the system by default
 - Reference images you can float over the canvas and trace straight through

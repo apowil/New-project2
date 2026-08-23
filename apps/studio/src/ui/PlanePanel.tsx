@@ -1,3 +1,5 @@
+import { formatLength } from '@wisp/core';
+
 import { useStore } from '../state/store.js';
 import { type PlaneMode } from '../viewport/sketchPlane.js';
 
@@ -14,6 +16,7 @@ export function PlanePanel() {
   const setPlaneMode = useStore((state) => state.setPlaneMode);
   const setPlaneOffset = useStore((state) => state.setPlaneOffset);
   const showIndicator = useStore((state) => state.showPlaneIndicator);
+  const unit = useStore((state) => state.unit);
   const setShowIndicator = useStore((state) => state.setShowPlaneIndicator);
 
   return (
@@ -49,7 +52,7 @@ export function PlanePanel() {
       <label className="flex flex-col gap-1.5">
         <span className="flex justify-between text-[11px] uppercase tracking-wide text-muted">
           <span>Depth</span>
-          <span className="tabular-nums text-secondary">{plane.offset.toFixed(2)} m</span>
+          <span className="tabular-nums text-secondary">{formatLength(plane.offset, unit)}</span>
         </span>
         <input
           type="range"

@@ -1,3 +1,5 @@
+export * from './units.js';
+
 export * as vec3 from './math/vec3.js';
 export type { Vec3 } from './math/vec3.js';
 
@@ -27,6 +29,10 @@ export {
   buildStrokeGeometry,
   computeBounds,
 } from './stroke/geometry.js';
+
+export * from './shapes/shapes.js';
+export { buildTextPolylines, measureText, type TextParams } from './shapes/text.js';
+export { ADVANCE, LINE_HEIGHT, glyphFor, hasGlyph, type Glyph } from './shapes/font.js';
 
 export * from './document/types.js';
 export * from './document/document.js';

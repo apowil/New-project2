@@ -570,6 +570,82 @@ export class Viewport {
     };
   }
 
+  /**
+   * Renders a still at a multiple of the on-screen size.
+   *
+   * The renderer is resized, drawn and put back within one call, so nothing
+   * else ever observes the temporary size. JPEG gets an opaque backdrop
+   * painted first, since it has no alpha channel and would otherwise come out
+   * with a black surround.
+   */
+  renderImage(format: 'png' | 'jpg', scale = 2, quality = 0.92): string {
+    const width = this.canvas.clientWidth || 1;
+    const height = this.canvas.clientHeight || 1;
+    const pixelRatio = this.renderer.getPixelRatio();
+
+    const indicatorWasVisible = this.planeIndicator.object.visible;
+    this.planeIndicator.setVisible(false);
+
+    try {
+      this.renderer.setPixelRatio(Math.min(scale, 4));
+      this.renderer.setSize(width, height, false);
+      this.camera.setAspect(width / height);
+      this.renderer.render(this.scene, this.camera.camera);
+
+      if (format === 'png') return this.canvas.toDataURL('image/png');
+
+      const target = document.createElement('canvas');
+      target.width = this.canvas.width;
+      target.height = this.canvas.height;
+      const context = target.getContext('2d');
+      if (!context) return this.canvas.toDataURL('image/png');
+
+      const background = (this.scene.background as THREE.Color | null) ?? new THREE.Color(0x111214);
+      context.fillStyle = `#${background.getHexString()}`;
+      context.fillRect(0, 0, target.width, target.height);
+      context.drawImage(this.canvas, 0, 0);
+      return target.toDataURL('image/jpeg', quality);
+    } finally {
+      this.renderer.setPixelRatio(pixelRatio);
+      this.renderer.setSize(width, height, false);
+      this.camera.setAspect(this.aspect);
+      this.planeIndicator.setVisible(indicatorWasVisible);
+      this.requestRender();
+    }
+  }
+
+  /**
+   * Vector export.
+   *
+   * SVGRenderer walks the same scene and emits one polygon per triangle with
+   * flat shading, so the output is true vector geometry rather than a traced
+   * bitmap. It is a different renderer, so nothing about the WebGL view is
+   * disturbed.
+   */
+  async renderSvg(): Promise<string> {
+    const { SVGRenderer } = await import('three/examples/jsm/renderers/SVGRenderer.js');
+
+    const width = this.canvas.clientWidth || 1;
+    const height = this.canvas.clientHeight || 1;
+
+    const renderer = new SVGRenderer();
+    renderer.setSize(width, height);
+    renderer.setQuality('high');
+
+    const indicatorWasVisible = this.planeIndicator.object.visible;
+    this.planeIndicator.setVisible(false);
+
+    try {
+      renderer.render(this.scene, this.camera.camera);
+      const element = renderer.domElement;
+      element.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      element.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      return `<?xml version="1.0" encoding="UTF-8"?>\n${element.outerHTML}`;
+    } finally {
+      this.planeIndicator.setVisible(indicatorWasVisible);
+    }
+  }
+
   /** PNG data URL of the current frame, at full render resolution. */
   snapshot(): string {
     this.renderer.render(this.scene, this.camera.camera);

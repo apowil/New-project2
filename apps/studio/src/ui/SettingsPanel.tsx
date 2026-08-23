@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { UNITS } from '@wisp/core';
+
 import { useStore } from '../state/store.js';
 import { type ThemePreference } from '../state/theme.js';
 import { MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from './Icons.js';
@@ -20,6 +22,8 @@ export function SettingsPanel() {
   const setTouchIntent = useStore((state) => state.setTouchIntent);
   const showPlaneIndicator = useStore((state) => state.showPlaneIndicator);
   const setShowPlaneIndicator = useStore((state) => state.setShowPlaneIndicator);
+  const unit = useStore((state) => state.unit);
+  const setUnit = useStore((state) => state.setUnit);
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +77,25 @@ export function SettingsPanel() {
                   >
                     <Icon />
                     {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+              <span className="section-label">Units</span>
+              <div className="grid grid-cols-5 gap-1">
+                {UNITS.map((candidate) => (
+                  <button
+                    key={candidate}
+                    type="button"
+                    className="chip px-1"
+                    data-active={unit === candidate}
+                    onClick={() => setUnit(candidate)}
+                    aria-pressed={unit === candidate}
+                    title={`Show measurements in ${candidate}`}
+                  >
+                    {candidate}
                   </button>
                 ))}
               </div>

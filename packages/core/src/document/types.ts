@@ -1,4 +1,5 @@
 import { type Vec3 } from '../math/vec3.js';
+import { type ShapeParams } from '../shapes/shapes.js';
 import { type StrokeSample } from '../stroke/resample.js';
 
 export type NodeId = string;
@@ -45,6 +46,17 @@ export interface StrokeNode {
   /** The sketch plane normal the stroke was drawn against; orients its ribbon. */
   planeNormal: Vec3;
   createdAt: number;
+  /**
+   * Set when the stroke came from a shape tool rather than freehand.
+   *
+   * Keeping the parameters — and the plane they were laid out on — is what
+   * lets a rectangle still be edited as "80 by 50" after the fact. A freehand
+   * stroke has no such description and leaves this undefined.
+   */
+  shape?: {
+    params: ShapeParams;
+    plane: { origin: Vec3; normal: Vec3; u: Vec3; v: Vec3 };
+  };
 }
 
 /**

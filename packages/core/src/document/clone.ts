@@ -50,6 +50,17 @@ export function cloneNode(node: SceneNode, layerId: LayerId = node.layerId): Sce
         },
         style: { ...node.style },
       };
+
+    case 'annotation':
+      return {
+        ...node,
+        id,
+        layerId,
+        from: { ...node.from },
+        to: { ...node.to },
+        offsetDirection: { ...node.offsetDirection },
+        style: { ...node.style },
+      };
   }
 }
 

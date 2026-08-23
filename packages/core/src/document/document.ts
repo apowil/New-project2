@@ -66,7 +66,7 @@ export function getLayer(doc: SketchDocument, id: LayerId): Layer | undefined {
   return doc.layers.find((layer) => layer.id === id);
 }
 
-/** Nodes in draw order, skipping any whose layer is hidden. */
+/** Nodes in draw order, skipping any hidden on its own or by its layer. */
 export function visibleNodes(doc: SketchDocument): SceneNode[] {
   const hidden = new Set(
     doc.layers.filter((layer) => !layer.visible).map((layer) => layer.id),
@@ -74,9 +74,38 @@ export function visibleNodes(doc: SketchDocument): SceneNode[] {
   const result: SceneNode[] = [];
   for (const id of doc.order) {
     const node = doc.nodes.get(id);
-    if (node && !hidden.has(node.layerId)) result.push(node);
+    if (node && !node.hidden && !hidden.has(node.layerId)) result.push(node);
   }
   return result;
+}
+
+/**
+ * True when a node can be selected and edited.
+ *
+ * Both the node and its layer have a say: locking a layer protects everything
+ * on it, and locking one node protects that node wherever it lives.
+ */
+export function isNodeEditable(doc: SketchDocument, node: SceneNode): boolean {
+  if (node.hidden || node.locked) return false;
+  return isLayerEditable(doc, node.layerId);
+}
+
+/** Every node sharing a group with the ones given, plus the ones given. */
+export function expandGroups(doc: SketchDocument, ids: NodeId[]): NodeId[] {
+  const groups = new Set<string>();
+  for (const id of ids) {
+    const group = doc.nodes.get(id)?.groupId;
+    if (group) groups.add(group);
+  }
+  if (groups.size === 0) return [...ids];
+
+  const wanted = new Set(ids);
+  for (const id of doc.order) {
+    const node = doc.nodes.get(id);
+    if (node?.groupId && groups.has(node.groupId)) wanted.add(id);
+  }
+  // Group members come back in draw order so the result is stable.
+  return doc.order.filter((id) => wanted.has(id));
 }
 
 export const nodesOnLayer = (doc: SketchDocument, layerId: LayerId): SceneNode[] =>

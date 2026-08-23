@@ -23,10 +23,12 @@
 
 export const WISP_MAGIC = 0x50534957; // "WISP" read as u32 little-endian
 /**
- * 2 added baked meshes. Version 1 files still load — the reader only rejects
- * versions it is too old to understand.
+ * 2 added baked meshes; 3 added per-node names, hiding, locking, grouping and
+ * dimension annotations. Older files still load — the reader only rejects
+ * versions it is too old to understand, and every field added since is
+ * optional, so a version 1 file simply arrives with none of them set.
  */
-export const WISP_FORMAT_VERSION = 2;
+export const WISP_FORMAT_VERSION = 3;
 
 /** Bytes per stroke sample: x, y, z, pressure. */
 export const SAMPLE_STRIDE = 16;
@@ -44,11 +46,19 @@ export interface SampleRange {
   count: number;
 }
 
-export interface StrokeManifestNode {
+/** The per-node fields that are independent of geometry. */
+export interface CommonManifestFields {
   id: string;
-  type: 'stroke';
   layerId: string;
   createdAt: number;
+  label?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  groupId?: string;
+}
+
+export interface StrokeManifestNode extends CommonManifestFields {
+  type: 'stroke';
   style: Record<string, unknown>;
   planeNormal: { x: number; y: number; z: number };
   /** Present only for shapes drawn with a shape tool. */
@@ -65,27 +75,37 @@ export interface BakedRange {
   indicesOffset: number;
 }
 
-export interface BakedManifestNode {
-  id: string;
+export interface BakedManifestNode extends CommonManifestFields {
   type: 'baked';
-  layerId: string;
-  createdAt: number;
   label: string;
   style: Record<string, unknown>;
   geometry: BakedRange;
 }
 
-export interface MeshManifestNode {
-  id: string;
+export interface MeshManifestNode extends CommonManifestFields {
   type: 'mesh';
-  layerId: string;
-  createdAt: number;
   style: Record<string, unknown>;
   primitive: string;
   transform: Record<string, unknown>;
 }
 
-export type ManifestNode = StrokeManifestNode | MeshManifestNode | BakedManifestNode;
+/** Wholly described by the manifest — it has no binary section of its own. */
+export interface AnnotationManifestNode extends CommonManifestFields {
+  type: 'annotation';
+  kind: string;
+  from: { x: number; y: number; z: number };
+  to: { x: number; y: number; z: number };
+  offset: number;
+  offsetDirection: { x: number; y: number; z: number };
+  textSize: number;
+  style: Record<string, unknown>;
+}
+
+export type ManifestNode =
+  | StrokeManifestNode
+  | MeshManifestNode
+  | BakedManifestNode
+  | AnnotationManifestNode;
 
 export interface WispManifest {
   id: string;

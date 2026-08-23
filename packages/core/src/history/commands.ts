@@ -7,7 +7,18 @@ import {
   type SketchDocument,
   type StrokeStyle,
 } from '../document/types.js';
-import { type Vec3 } from '../math/vec3.js';
+import {
+  applyAffine,
+  applyLinear,
+  averageScale,
+  flipsOrientation,
+  invert,
+  isIdentity,
+  normalMatrix,
+  translation,
+  type Affine,
+} from '../math/affine.js';
+import { normalize, type Vec3 } from '../math/vec3.js';
 import { type Command } from './history.js';
 
 export class AddNodeCommand implements Command {
@@ -208,6 +219,145 @@ export class SetStyleCommand implements Command {
   }
 }
 
+/** The per-node fields the outliner edits. */
+export type NodeFlags = Pick<SceneNode, 'label' | 'hidden' | 'locked'>;
+
+export class SetNodeFlagsCommand implements Command {
+  readonly label: string;
+  private previous = new Map<NodeId, NodeFlags>();
+
+  constructor(
+    private readonly ids: NodeId[],
+    private readonly patch: NodeFlags,
+    label = 'Change object',
+  ) {
+    this.label = label;
+  }
+
+  apply(doc: SketchDocument): void {
+    this.previous.clear();
+    for (const id of this.ids) {
+      const node = doc.nodes.get(id);
+      if (!node) continue;
+      this.previous.set(id, { label: node.label, hidden: node.hidden, locked: node.locked });
+      // A baked mesh's label is required, so never let a patch clear it.
+      if (this.patch.label !== undefined || node.type !== 'baked') {
+        Object.assign(node, this.patch);
+      } else {
+        Object.assign(node, { ...this.patch, label: node.label });
+      }
+    }
+    touch(doc);
+  }
+
+  revert(doc: SketchDocument): void {
+    for (const [id, flags] of this.previous) {
+      const node = doc.nodes.get(id);
+      if (node) Object.assign(node, flags);
+    }
+    touch(doc);
+  }
+}
+
+/**
+ * Ties nodes together so selecting one selects all of them.
+ *
+ * Unlike a boolean, this changes no geometry: the parts stay separate and can
+ * be taken apart again. It is the non-destructive half of "keep these
+ * together", which booleans cannot offer because they bake.
+ */
+export class GroupNodesCommand implements Command {
+  readonly label = 'Group';
+  private previous = new Map<NodeId, string | undefined>();
+
+  constructor(
+    private readonly ids: NodeId[],
+    private readonly groupId: string,
+  ) {}
+
+  apply(doc: SketchDocument): void {
+    this.previous.clear();
+    for (const id of this.ids) {
+      const node = doc.nodes.get(id);
+      if (!node) continue;
+      this.previous.set(id, node.groupId);
+      node.groupId = this.groupId;
+    }
+    touch(doc);
+  }
+
+  revert(doc: SketchDocument): void {
+    for (const [id, groupId] of this.previous) {
+      const node = doc.nodes.get(id);
+      if (!node) continue;
+      if (groupId === undefined) delete node.groupId;
+      else node.groupId = groupId;
+    }
+    touch(doc);
+  }
+}
+
+export class UngroupNodesCommand implements Command {
+  readonly label = 'Ungroup';
+  private previous = new Map<NodeId, string | undefined>();
+
+  constructor(private readonly ids: NodeId[]) {}
+
+  apply(doc: SketchDocument): void {
+    this.previous.clear();
+    for (const id of this.ids) {
+      const node = doc.nodes.get(id);
+      if (!node?.groupId) continue;
+      this.previous.set(id, node.groupId);
+      delete node.groupId;
+    }
+    touch(doc);
+  }
+
+  revert(doc: SketchDocument): void {
+    for (const [id, groupId] of this.previous) {
+      const node = doc.nodes.get(id);
+      if (node && groupId !== undefined) node.groupId = groupId;
+    }
+    touch(doc);
+  }
+}
+
+/**
+ * Moves a layer up or down the list.
+ *
+ * This is organisation, not occlusion: in 3D the depth buffer decides what is
+ * in front, so unlike a 2D paint program the order here does not change what
+ * you see. It changes where a layer sits in the panel, which is what matters
+ * when a sketch has fifteen of them.
+ */
+export class ReorderLayerCommand implements Command {
+  readonly label = 'Reorder layers';
+  private from = -1;
+
+  constructor(
+    private readonly layerId: LayerId,
+    private readonly to: number,
+  ) {}
+
+  apply(doc: SketchDocument): void {
+    this.from = doc.layers.findIndex((layer) => layer.id === this.layerId);
+    move(doc, this.from, this.to);
+  }
+
+  revert(doc: SketchDocument): void {
+    move(doc, this.to, this.from);
+  }
+}
+
+function move(doc: SketchDocument, from: number, to: number): void {
+  if (from < 0 || to < 0 || from >= doc.layers.length || to >= doc.layers.length) return;
+  const [layer] = doc.layers.splice(from, 1);
+  if (!layer) return;
+  doc.layers.splice(to, 0, layer);
+  touch(doc);
+}
+
 export class RenameDocumentCommand implements Command {
   readonly label = 'Rename sketch';
   private previous = '';
@@ -396,61 +546,138 @@ export class DuplicateLayerCommand implements Command {
 }
 
 /**
- * Shifts nodes in space.
+ * Moves nodes through an affine transform.
+ *
+ * Translation, rotation, scaling and mirroring all arrive here, which is what
+ * keeps them consistent: there is one place that knows a stroke transforms by
+ * its centreline, a baked mesh by its vertices *and* its normals, and that a
+ * mirror has to reverse triangle winding or the surface ends up inside out.
  *
  * The buffers are replaced rather than mutated in place: the viewport decides
  * whether to re-upload geometry by comparing array identity, so editing the
  * existing array would move the data without anything noticing.
  */
-export function translateNodes(doc: SketchDocument, ids: readonly NodeId[], delta: Vec3): void {
+export function transformNodes(
+  doc: SketchDocument,
+  ids: readonly NodeId[],
+  transform: Affine,
+): void {
+  if (isIdentity(transform)) return;
+
+  const normals = normalMatrix(transform);
+  const flip = flipsOrientation(transform);
+  const lengthScale = averageScale(transform);
+
   for (const id of ids) {
     const node = doc.nodes.get(id);
     if (!node) continue;
 
     if (node.type === 'stroke') {
       node.samples = node.samples.map((sample) => ({
-        position: {
-          x: sample.position.x + delta.x,
-          y: sample.position.y + delta.y,
-          z: sample.position.z + delta.z,
-        },
+        position: applyAffine(transform, sample.position),
         pressure: sample.pressure,
       }));
+      node.planeNormal = normalize(applyLinear(normals, node.planeNormal));
+      // A scaled stroke should get thicker, not stay a hairline on a bigger
+      // shape. Its parametric description no longer matches the new size, so
+      // it stops being editable as numbers — better than numbers that lie.
+      if (Math.abs(lengthScale - 1) > 1e-9) {
+        node.style = { ...node.style, width: node.style.width * lengthScale };
+        node.shape = undefined;
+      }
     } else if (node.type === 'baked') {
       const positions = node.positions.slice();
       for (let i = 0; i < positions.length; i += 3) {
-        positions[i] = positions[i]! + delta.x;
-        positions[i + 1] = positions[i + 1]! + delta.y;
-        positions[i + 2] = positions[i + 2]! + delta.z;
+        const p = applyAffine(transform, {
+          x: positions[i]!,
+          y: positions[i + 1]!,
+          z: positions[i + 2]!,
+        });
+        positions[i] = p.x;
+        positions[i + 1] = p.y;
+        positions[i + 2] = p.z;
       }
+
+      const normalBuffer = node.normals.slice();
+      for (let i = 0; i < normalBuffer.length; i += 3) {
+        const n = normalize(
+          applyLinear(normals, {
+            x: normalBuffer[i]!,
+            y: normalBuffer[i + 1]!,
+            z: normalBuffer[i + 2]!,
+          }),
+        );
+        normalBuffer[i] = n.x;
+        normalBuffer[i + 1] = n.y;
+        normalBuffer[i + 2] = n.z;
+      }
+
       node.positions = positions;
+      node.normals = normalBuffer;
+
+      if (flip) {
+        // Swap two corners of every triangle to put the winding back.
+        const indices = node.indices.slice();
+        for (let i = 0; i + 2 < indices.length; i += 3) {
+          const swap = indices[i + 1]!;
+          indices[i + 1] = indices[i + 2]!;
+          indices[i + 2] = swap;
+        }
+        node.indices = indices;
+      }
+    } else if (node.type === 'annotation') {
+      node.from = applyAffine(transform, node.from);
+      node.to = applyAffine(transform, node.to);
+      node.offsetDirection = normalize(applyLinear(normals, node.offsetDirection));
+      node.offset *= lengthScale;
+      node.textSize *= lengthScale;
     } else {
       node.transform = {
         ...node.transform,
-        position: {
-          x: node.transform.position.x + delta.x,
-          y: node.transform.position.y + delta.y,
-          z: node.transform.position.z + delta.z,
-        },
+        position: applyAffine(transform, node.transform.position),
       };
     }
   }
   touch(doc);
 }
 
-export class TranslateNodesCommand implements Command {
-  readonly label = 'Move';
+/** Shifts nodes in space. */
+export const translateNodes = (
+  doc: SketchDocument,
+  ids: readonly NodeId[],
+  delta: Vec3,
+): void => transformNodes(doc, ids, translation(delta));
+
+/**
+ * A transform applied to a selection, undone by its inverse.
+ *
+ * Storing the inverse rather than a copy of the geometry keeps a large
+ * selection cheap to sit in the undo stack.
+ */
+export class TransformNodesCommand implements Command {
+  private readonly inverse: Affine | null;
 
   constructor(
     private readonly ids: NodeId[],
-    private readonly delta: Vec3,
-  ) {}
+    private readonly transform: Affine,
+    readonly label = 'Transform',
+  ) {
+    this.inverse = invert(transform);
+  }
 
   apply(doc: SketchDocument): void {
-    translateNodes(doc, this.ids, this.delta);
+    transformNodes(doc, this.ids, this.transform);
   }
 
   revert(doc: SketchDocument): void {
-    translateNodes(doc, this.ids, { x: -this.delta.x, y: -this.delta.y, z: -this.delta.z });
+    // Null only for a transform that collapses an axis, which the callers
+    // refuse to build; doing nothing beats corrupting the geometry.
+    if (this.inverse) transformNodes(doc, this.ids, this.inverse);
+  }
+}
+
+export class TranslateNodesCommand extends TransformNodesCommand {
+  constructor(ids: NodeId[], delta: Vec3) {
+    super(ids, translation(delta), 'Move');
   }
 }

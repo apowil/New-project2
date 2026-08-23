@@ -1,5 +1,6 @@
 import {
   DEFAULT_STROKE_STYLE,
+  type AnnotationNode,
   type BakedMeshNode,
   type Layer,
   type MeshNode,
@@ -16,13 +17,40 @@ import {
   WISP_MAGIC,
   WispFormatError,
   align4,
+  type AnnotationManifestNode,
   type BakedManifestNode,
+  type CommonManifestFields,
   type ManifestNode,
   type StrokeManifestNode,
   type WispManifest,
 } from './format.js';
 
 const HEADER_BYTES = 12;
+
+/**
+ * The fields every node writes, whatever its geometry.
+ *
+ * The optional ones are omitted when unset rather than written as `false` or
+ * `null`: a sketch has thousands of nodes, and four dead keys on each is real
+ * weight in the manifest for no gain.
+ */
+const common = (node: SceneNode): CommonManifestFields => ({
+  id: node.id,
+  layerId: node.layerId,
+  createdAt: node.createdAt,
+  ...(node.label !== undefined ? { label: node.label } : {}),
+  ...(node.hidden ? { hidden: true } : {}),
+  ...(node.locked ? { locked: true } : {}),
+  ...(node.groupId !== undefined ? { groupId: node.groupId } : {}),
+});
+
+/** Reads those same fields back, tolerating a file that carries none of them. */
+const readCommon = (entry: CommonManifestFields) => ({
+  ...(typeof entry.label === 'string' ? { label: entry.label } : {}),
+  ...(entry.hidden === true ? { hidden: true } : {}),
+  ...(entry.locked === true ? { locked: true } : {}),
+  ...(typeof entry.groupId === 'string' ? { groupId: entry.groupId } : {}),
+});
 
 /** Encodes a document into a `.wisp` buffer. */
 export function serializeDocument(doc: SketchDocument): ArrayBuffer {
@@ -43,10 +71,8 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
       const indicesOffset = normalsOffset + node.normals.byteLength;
 
       nodes.push({
-        id: node.id,
+        ...common(node),
         type: 'baked',
-        layerId: node.layerId,
-        createdAt: node.createdAt,
         label: node.label,
         style: { ...node.style },
         geometry: {
@@ -63,10 +89,8 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
       binaryBytes = indicesOffset + node.indices.byteLength;
     } else if (node.type === 'stroke') {
       nodes.push({
-        id: node.id,
+        ...common(node),
         type: 'stroke',
-        layerId: node.layerId,
-        createdAt: node.createdAt,
         style: { ...node.style },
         planeNormal: { ...node.planeNormal },
         ...(node.shape ? { shape: node.shape } : {}),
@@ -74,12 +98,22 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
       });
       strokes.push(node);
       binaryBytes += node.samples.length * SAMPLE_STRIDE;
+    } else if (node.type === 'annotation') {
+      nodes.push({
+        ...common(node),
+        type: 'annotation',
+        kind: node.kind,
+        from: { ...node.from },
+        to: { ...node.to },
+        offset: node.offset,
+        offsetDirection: { ...node.offsetDirection },
+        textSize: node.textSize,
+        style: { ...node.style },
+      });
     } else {
       nodes.push({
-        id: node.id,
+        ...common(node),
         type: 'mesh',
-        layerId: node.layerId,
-        createdAt: node.createdAt,
         style: { ...node.style },
         primitive: node.primitive,
         transform: {
@@ -205,7 +239,9 @@ export function deserializeDocument(buffer: ArrayBuffer): SketchDocument {
         ? readStroke(entry, buffer, binaryStart, binaryBytes)
         : entry.type === 'baked'
           ? readBaked(entry, buffer, binaryStart, binaryBytes)
-          : readMesh(entry);
+          : entry.type === 'annotation'
+            ? readAnnotation(entry)
+            : readMesh(entry);
 
     if (!node) continue;
     nodes.set(node.id, node);
@@ -282,8 +318,32 @@ function readStroke(
     style: readStyle(entry.style),
     planeNormal: readVec3(entry.planeNormal, vec3(0, 1, 0)),
     createdAt: Number(entry.createdAt) || Date.now(),
+    ...readCommon(entry),
     // Shape parameters are plain JSON; a file without them loads as freehand.
     ...(entry.shape ? { shape: entry.shape as StrokeNode['shape'] } : {}),
+  };
+}
+
+function readAnnotation(entry: AnnotationManifestNode): AnnotationNode | null {
+  const from = readVec3(entry.from, vec3());
+  const to = readVec3(entry.to, vec3());
+  // A dimension spanning no distance has nothing to measure and would render
+  // as a degenerate line, so drop it rather than carry it forward.
+  if (from.x === to.x && from.y === to.y && from.z === to.z) return null;
+
+  return {
+    id: entry.id,
+    type: 'annotation',
+    kind: 'dimension',
+    layerId: entry.layerId,
+    from,
+    to,
+    offset: Number.isFinite(Number(entry.offset)) ? Number(entry.offset) : 0,
+    offsetDirection: readVec3(entry.offsetDirection, vec3(0, 1, 0)),
+    textSize: positive(entry.textSize, 0.08),
+    style: readStyle(entry.style),
+    createdAt: Number(entry.createdAt) || Date.now(),
+    ...readCommon(entry),
   };
 }
 
@@ -337,6 +397,7 @@ function readBaked(
     ),
     style: readStyle(entry.style),
     createdAt: Number(entry.createdAt) || Date.now(),
+    ...readCommon(entry),
   };
 }
 
@@ -355,6 +416,7 @@ function readMesh(entry: ManifestNode): MeshNode | null {
     },
     style: readStyle(entry.style),
     createdAt: Number(entry.createdAt) || Date.now(),
+    ...readCommon(entry),
   };
 }
 

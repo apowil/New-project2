@@ -4,6 +4,7 @@ export * as vec3 from './math/vec3.js';
 export type { Vec3 } from './math/vec3.js';
 
 export * from './math/plane.js';
+export * from './math/affine.js';
 
 export { OneEuroFilter, PointerFilter, type OneEuroOptions } from './stroke/filter.js';
 export {

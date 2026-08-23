@@ -155,6 +155,87 @@ describe('deserializeDocument rejects bad input', () => {
     expect(() => deserializeDocument(buffer.slice(0, 20))).toThrow(WispFormatError);
   });
 
+  it('round-trips per-node names, hiding, locking and grouping', () => {
+    const doc = populated();
+    const a = doc.nodes.get('a')!;
+    const b = doc.nodes.get('b')!;
+    Object.assign(a, { label: 'Handle', hidden: true, locked: true, groupId: 'grp_1' });
+    Object.assign(b, { groupId: 'grp_1' });
+
+    const restored = deserializeDocument(serializeDocument(doc));
+    const back = restored.nodes.get('a')!;
+
+    expect(back.label).toBe('Handle');
+    expect(back.hidden).toBe(true);
+    expect(back.locked).toBe(true);
+    expect(back.groupId).toBe('grp_1');
+    expect(restored.nodes.get('b')!.groupId).toBe('grp_1');
+  });
+
+  it('leaves the optional fields out entirely when they are unset', () => {
+    const buffer = serializeDocument(populated());
+    const view = new DataView(buffer);
+    const length = view.getUint32(8, true);
+    const manifest = JSON.parse(
+      new TextDecoder().decode(new Uint8Array(buffer, 12, length)),
+    ) as { nodes: Array<Record<string, unknown>> };
+
+    // Layers legitimately carry `locked`; it is the per-node copies that would
+    // be dead weight, thousands of nodes times four keys.
+    for (const node of manifest.nodes) {
+      expect(Object.keys(node)).not.toContain('label');
+      expect(Object.keys(node)).not.toContain('hidden');
+      expect(Object.keys(node)).not.toContain('locked');
+      expect(Object.keys(node)).not.toContain('groupId');
+    }
+  });
+
+  it('round-trips a dimension annotation', () => {
+    const doc = populated();
+    addNode(doc, {
+      id: 'dim',
+      type: 'annotation',
+      kind: 'dimension',
+      layerId: doc.activeLayerId,
+      from: vec3(0, 0, 0),
+      to: vec3(1.5, 0, 0),
+      offset: 0.2,
+      offsetDirection: vec3(0, 1, 0),
+      textSize: 0.09,
+      style: { ...DEFAULT_STROKE_STYLE },
+      createdAt: 1_700_000_000_000,
+    });
+
+    const restored = deserializeDocument(serializeDocument(doc));
+    const back = restored.nodes.get('dim');
+
+    expect(back?.type).toBe('annotation');
+    if (back?.type !== 'annotation') throw new Error('expected an annotation');
+    expect(back.to.x).toBeCloseTo(1.5, 6);
+    expect(back.offset).toBeCloseTo(0.2, 6);
+    expect(back.textSize).toBeCloseTo(0.09, 6);
+  });
+
+  it('drops a dimension that spans no distance', () => {
+    const doc = populated();
+    addNode(doc, {
+      id: 'dim',
+      type: 'annotation',
+      kind: 'dimension',
+      layerId: doc.activeLayerId,
+      from: vec3(1, 1, 1),
+      to: vec3(1, 1, 1),
+      offset: 0,
+      offsetDirection: vec3(0, 1, 0),
+      textSize: 0.09,
+      style: { ...DEFAULT_STROKE_STYLE },
+      createdAt: 0,
+    });
+
+    const restored = deserializeDocument(serializeDocument(doc));
+    expect(restored.nodes.has('dim')).toBe(false);
+  });
+
   it('drops nodes whose layer is missing rather than misplacing them', () => {
     const doc = populated();
     // Remove the second layer but leave stroke "b" pointing at it.

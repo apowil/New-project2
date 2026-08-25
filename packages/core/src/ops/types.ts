@@ -16,6 +16,29 @@
 import { type StrokeGeometryOptions } from '../stroke/geometry.js';
 import { type StrokeSample } from '../stroke/resample.js';
 
+/**
+ * One solid going into a boolean.
+ *
+ * A stroke travels as its centreline rather than as triangles, which is the
+ * difference between a few kilobytes and a few megabytes on the wire — and the
+ * receiving end can rebuild the exact same tube from it, because sweeping is
+ * deterministic. Only geometry with no centreline left has to be sent whole.
+ */
+export type SolidInput =
+  | {
+      kind: 'stroke';
+      samples: StrokeSample[];
+      options: Partial<StrokeGeometryOptions>;
+    }
+  | {
+      kind: 'mesh';
+      positions: Float32Array;
+      normals: Float32Array;
+      indices: Uint32Array;
+    };
+
+export type BooleanOperation = 'union' | 'subtract' | 'intersect' | 'join';
+
 export interface OpRequestMap {
   /** Sweep a centreline into a mesh. */
   buildStroke: {
@@ -29,6 +52,11 @@ export interface OpRequestMap {
     spacing: number;
     smoothing: number;
   };
+  /** Cut, fuse or intersect solids. The expensive one. */
+  evaluateBoolean: {
+    op: BooleanOperation;
+    solids: SolidInput[];
+  };
 }
 
 export interface OpResponseMap {
@@ -41,6 +69,23 @@ export interface OpResponseMap {
   processStroke: {
     samples: StrokeSample[];
   };
+  /**
+   * Failure is a value here, not an exception.
+   *
+   * A boolean fails for reasons the person drawing can act on — shapes that do
+   * not overlap, a stroke crossing its own body — and those reasons have to
+   * survive the trip back from a worker or another machine intact. An
+   * exception thrown across that boundary arrives as a bare string with no
+   * type, so the reason is carried deliberately instead.
+   */
+  evaluateBoolean:
+    | {
+        ok: true;
+        positions: Float32Array;
+        normals: Float32Array;
+        indices: Uint32Array;
+      }
+    | { ok: false; reason: string };
 }
 
 export type OpName = keyof OpRequestMap;
@@ -52,6 +97,14 @@ export interface OpRunner {
   dispose?(): void;
 }
 
+/**
+ * Implementations, keyed by name.
+ *
+ * Partial on purpose. Booleans need a CSG library, and `@wisp/core` carries no
+ * runtime dependencies by design — so the app registers that handler at
+ * startup instead. The desktop host registers the same one. Anything not
+ * registered fails loudly rather than silently doing nothing.
+ */
 export type OpHandlers = {
-  [K in OpName]: (request: OpRequestMap[K]) => OpResponseMap[K];
+  [K in OpName]?: (request: OpRequestMap[K]) => OpResponseMap[K];
 };

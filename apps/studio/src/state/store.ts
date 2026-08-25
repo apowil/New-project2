@@ -61,6 +61,7 @@ import { pickImageFile, readImageAsDataUrl } from '../storage/images.js';
 import { DEFAULT_BRUSH_ID, findBrush, styleForBrush } from '../tools/brushes.js';
 import { BOOLEAN_LABELS, evaluateBoolean, type BooleanOp } from '../tools/booleans.js';
 import { rebuildShape } from '../tools/shapeTool.js';
+import { WorkerOpRunner } from '../ops/workerRunner.js';
 import {
   SCENE_THEMES,
   applyTheme,
@@ -209,6 +210,14 @@ interface AppState {
   reference: ReferenceImage | null;
   /** Set while the next tap should sample a colour rather than select. */
   eyedropper: boolean;
+  /**
+   * A label while a heavy operation is running, or null.
+   *
+   * Shown rather than hidden: the work now happens off the main thread, so the
+   * app stays responsive — and a responsive app with no sign of progress just
+   * looks like it ignored you.
+   */
+  busy: string | null;
   /** Filter text for the sketch library. */
   librarySearch: string;
   librarySort: 'recent' | 'name';
@@ -263,7 +272,7 @@ interface AppState {
   cutSelection: () => void;
   paste: () => void;
   moveSelectionToLayer: (layerId: string) => void;
-  applyBoolean: (op: BooleanOp) => void;
+  applyBoolean: (op: BooleanOp) => Promise<void>;
   duplicateSelection: () => void;
 
   restyleSelection: (patch: Partial<StrokeStyle>) => void;
@@ -353,6 +362,7 @@ export const useStore = create<AppState>((set, get) => ({
   recentColors: [],
   reference: null,
   eyedropper: false,
+  busy: null,
   librarySearch: '',
   librarySort: 'recent',
   selection: [],
@@ -557,6 +567,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   /** Reopens the last sketch, if there is one. Runs once on startup. */
   boot: async () => {
+    // Heavy work moves off the main thread as soon as the app starts, so the
+    // very first boolean is already free of the freeze.
+    session.ops = new WorkerOpRunner();
+
     set({ themePreference: readThemePreference() });
     get().syncResolvedTheme();
 
@@ -897,8 +911,15 @@ export const useStore = create<AppState>((set, get) => ({
     get().run(new MoveNodesToLayerCommand([...selection], layerId));
   },
 
-  applyBoolean: (op) => {
+  /**
+   * Booleans run through the operation runner, which means off the main
+   * thread — so the canvas keeps drawing while a heavy one is evaluated
+   * instead of the whole app appearing to hang.
+   */
+  applyBoolean: async (op) => {
     const state = get();
+    if (state.busy) return;
+
     const nodes = state.selection
       .map((id) => session.document.nodes.get(id))
       .filter((node): node is SceneNode => node !== undefined && isSolid(node));
@@ -908,9 +929,27 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
+    set({ busy: `${BOOLEAN_LABELS[op]}…` });
     try {
-      const result = evaluateBoolean(nodes, op, state.activeLayerId, nodes[0]!.style);
-      state.run(
+      const result = await evaluateBoolean(
+        session.ops,
+        nodes,
+        op,
+        state.activeLayerId,
+        nodes[0]!.style,
+      );
+
+      // The document can have moved on while the worker was busy: anything
+      // that went into this operation may have been undone or deleted. Redoing
+      // it against a document that no longer contains the inputs would graft
+      // in geometry from nowhere.
+      const stillPresent = nodes.every((node) => session.document.nodes.has(node.id));
+      if (!stillPresent) {
+        set({ statusMessage: 'Those shapes changed while that was working.' });
+        return;
+      }
+
+      get().run(
         new ReplaceNodesCommand(
           nodes.map((node) => node.id),
           [result],
@@ -920,6 +959,8 @@ export const useStore = create<AppState>((set, get) => ({
       set({ selection: [result.id], statusMessage: `${BOOLEAN_LABELS[op]} complete` });
     } catch (error) {
       set({ statusMessage: describeError(error, 'That operation could not be completed.') });
+    } finally {
+      set({ busy: null });
     }
   },
 

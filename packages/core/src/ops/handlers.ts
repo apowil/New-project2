@@ -18,11 +18,39 @@ export const handlers: OpHandlers = {
   },
 };
 
+/**
+ * Adds an implementation this package cannot provide itself.
+ *
+ * Called once at startup on each side that runs operations — the tab, the
+ * worker, the desktop host — with the *same* function, so a boolean evaluated
+ * on a PC produces the geometry the tablet would have produced. Divergence
+ * here would mean a sketch that changes shape depending on where it was
+ * computed, which is the kind of bug that is very hard to see and very hard to
+ * live with.
+ */
+export function registerOpHandler<K extends OpName>(
+  name: K,
+  handler: (request: OpRequestMap[K]) => OpResponseMap[K],
+): void {
+  // The map is keyed by a union, so TypeScript cannot see that this handler
+  // matches this key; the signature above is what actually enforces it.
+  handlers[name] = handler as OpHandlers[K];
+}
+
 /** Runs operations on the calling thread. The always-available fallback. */
 export class InlineOpRunner implements OpRunner {
   readonly description = 'On device';
 
   async run<K extends OpName>(name: K, request: OpRequestMap[K]): Promise<OpResponseMap[K]> {
-    return handlers[name](request as never) as OpResponseMap[K];
+    return runOp(name, request);
   }
+}
+
+/** Dispatches to a registered handler, or says plainly that there is none. */
+export function runOp<K extends OpName>(name: K, request: OpRequestMap[K]): OpResponseMap[K] {
+  const handler = handlers[name];
+  if (!handler) {
+    throw new Error(`No handler registered for the "${name}" operation.`);
+  }
+  return handler(request as never) as OpResponseMap[K];
 }

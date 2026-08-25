@@ -29,6 +29,7 @@ export {
   DEFAULT_STROKE_OPTIONS,
   buildStrokeGeometry,
   computeBounds,
+  geometryOptions,
 } from './stroke/geometry.js';
 
 export * from './shapes/shapes.js';
@@ -45,7 +46,7 @@ export { History, type Command, type HistoryState } from './history/history.js';
 export * from './history/commands.js';
 
 export * from './ops/types.js';
-export { handlers, InlineOpRunner } from './ops/handlers.js';
+export { handlers, registerOpHandler, runOp, InlineOpRunner } from './ops/handlers.js';
 
 export { serializeDocument, deserializeDocument } from './io/serialize.js';
 export {

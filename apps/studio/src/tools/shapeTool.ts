@@ -3,6 +3,7 @@ import {
   buildShapeSamples,
   buildStrokeGeometry,
   createId,
+  geometryOptions,
   isLayerEditable,
   makePlane,
   mirrorCombinations,
@@ -20,7 +21,7 @@ import {
 
 import { type StrokeInput } from '../viewport/gestures.js';
 import { resolvePlane } from '../viewport/sketchPlane.js';
-import { geometryOptions, type Viewport } from '../viewport/viewport.js';
+import { type Viewport } from '../viewport/viewport.js';
 import { session, useStore } from '../state/store.js';
 
 /**

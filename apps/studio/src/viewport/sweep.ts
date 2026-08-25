@@ -1,12 +1,12 @@
 import {
   buildStrokeGeometry,
+  geometryOptions,
   type StrokeGeometry,
   type StrokeSample,
   type StrokeStyle,
   type Vec3,
 } from '@wisp/core';
 
-import { geometryOptions } from './viewport.js';
 
 /**
  * Sweeping a set of polylines into one mesh.

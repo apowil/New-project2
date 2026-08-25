@@ -58,6 +58,29 @@ export const DEFAULT_STROKE_OPTIONS: StrokeGeometryOptions = {
   taper: 0.12,
 };
 
+/**
+ * The parts of a style that change the swept surface rather than its shading.
+ *
+ * Lives here rather than beside the renderer because the worker and the
+ * desktop host both need it to rebuild a stroke, and neither can afford to
+ * import a viewport to get at it.
+ */
+export const geometryOptions = (style: {
+  width: number;
+  sides: number;
+  flatness: number;
+  taper: number;
+  pressureCurve: number;
+  minPressureScale: number;
+}): StrokeGeometryOptions => ({
+  width: style.width,
+  sides: style.sides,
+  flatness: style.flatness,
+  taper: style.taper,
+  pressureCurve: style.pressureCurve,
+  minPressureScale: style.minPressureScale,
+});
+
 export interface StrokeGeometry {
   positions: Float32Array;
   normals: Float32Array;

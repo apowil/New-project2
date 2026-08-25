@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import {
   buildDimension,
   buildStrokeGeometry,
+  geometryOptions,
   visibleNodes,
   type AnnotationNode,
   type BakedMeshNode,
@@ -20,15 +21,6 @@ import { PlaneIndicator } from './sketchPlane.js';
 import { applyStyle, makeStrokeMaterial, toBufferGeometry } from './strokeMesh.js';
 import { sweepPolylines } from './sweep.js';
 
-/** The parts of a style that change the swept surface rather than its shading. */
-export const geometryOptions = (style: StrokeStyle) => ({
-  width: style.width,
-  sides: style.sides,
-  flatness: style.flatness,
-  taper: style.taper,
-  pressureCurve: style.pressureCurve,
-  minPressureScale: style.minPressureScale,
-});
 
 interface StrokeEntry {
   mesh: THREE.Mesh;

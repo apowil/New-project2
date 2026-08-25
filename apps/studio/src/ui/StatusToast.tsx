@@ -6,6 +6,7 @@ import { useStore } from '../state/store.js';
 export function StatusToast() {
   const message = useStore((state) => state.statusMessage);
   const setStatusMessage = useStore((state) => state.setStatusMessage);
+  const busy = useStore((state) => state.busy);
 
   useEffect(() => {
     if (!message) return;
@@ -13,15 +14,24 @@ export function StatusToast() {
     return () => clearTimeout(id);
   }, [message, setStatusMessage]);
 
-  if (!message) return null;
+  // Work in progress outranks a stale confirmation from a moment ago.
+  const shown = busy ?? message;
+  if (!shown) return null;
 
   return (
     <div
-      className="panel pointer-events-auto absolute left-1/2 top-4 z-30 -translate-x-1/2 px-4 py-2 text-sm text-primary"
+      className="panel pointer-events-auto absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-2 px-4 py-2 text-sm text-primary"
       role="status"
       aria-live="polite"
     >
-      {message}
+      {busy && (
+        <span
+          className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-line"
+          style={{ borderTopColor: 'var(--color-accent)' }}
+          aria-hidden="true"
+        />
+      )}
+      {shown}
     </div>
   );
 }

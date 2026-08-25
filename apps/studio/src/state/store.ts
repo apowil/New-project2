@@ -62,6 +62,7 @@ import { DEFAULT_BRUSH_ID, findBrush, styleForBrush } from '../tools/brushes.js'
 import { BOOLEAN_LABELS, evaluateBoolean, type BooleanOp } from '../tools/booleans.js';
 import { rebuildShape } from '../tools/shapeTool.js';
 import { WorkerOpRunner } from '../ops/workerRunner.js';
+import { DesktopOpRunner, isDesktop } from '../ops/desktopRunner.js';
 import {
   SCENE_THEMES,
   applyTheme,
@@ -567,9 +568,13 @@ export const useStore = create<AppState>((set, get) => ({
 
   /** Reopens the last sketch, if there is one. Runs once on startup. */
   boot: async () => {
-    // Heavy work moves off the main thread as soon as the app starts, so the
-    // very first boolean is already free of the freeze.
-    session.ops = new WorkerOpRunner();
+    // Heavy work never runs on the main thread. Inside the desktop app that
+    // means a pool of real processes; in a browser — including a tablet
+    // connected to a desktop host — a Web Worker.
+    session.ops = isDesktop()
+      ? // Falls back to a worker in this page if a compute process dies.
+        new DesktopOpRunner(new WorkerOpRunner())
+      : new WorkerOpRunner();
 
     set({ themePreference: readThemePreference() });
     get().syncResolvedTheme();

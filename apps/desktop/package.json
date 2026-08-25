@@ -1,0 +1,23 @@
+{
+  "name": "@wisp/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wisp desktop \u2014 runs the studio natively and can host it for tablets on the same network.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "package": "npm run build && electron-builder --publish never"
+  },
+  "dependencies": {
+    "@wisp/core": "*",
+    "@wisp/ops": "*"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "esbuild": "^0.25.0",
+    "ws": "^8.21.3"
+  }
+}

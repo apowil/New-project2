@@ -1,8 +1,7 @@
 /// <reference lib="webworker" />
 
-import { registerOpHandler, runOp, type OpName, type OpRequestMap } from '@wisp/core';
-
-import { evaluateBooleanOp } from './booleanOp.js';
+import { runOp, type OpName, type OpRequestMap } from '@wisp/core';
+import { registerHeavyOps } from '@wisp/ops';
 
 /**
  * The worker that heavy operations actually run in.
@@ -16,7 +15,7 @@ import { evaluateBooleanOp } from './booleanOp.js';
  * ran it.
  */
 
-registerOpHandler('evaluateBoolean', evaluateBooleanOp);
+registerHeavyOps();
 
 export interface WorkerRequest {
   id: number;

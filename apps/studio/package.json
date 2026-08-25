@@ -2,7 +2,7 @@
   "name": "@wisp/studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Wisp studio — the sketching app itself. Runs as a PWA on the tablet, inside the Android shell, and inside the desktop app.",
+  "description": "Wisp studio \u2014 the sketching app itself. Runs as a PWA on the tablet, inside the Android shell, and inside the desktop app.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@wisp/core": "*",
+    "@wisp/ops": "*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.185.0",

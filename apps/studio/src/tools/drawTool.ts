@@ -158,12 +158,22 @@ export class DrawTool {
     const samples = raw.length >= 2 ? raw : dotStroke(raw, plane, style);
     if (!samples) return;
 
-    const { samples: processed } = await session.ops.run('processStroke', {
-      samples,
-      simplifyTolerance: this.minSpacing * 0.4,
-      spacing: this.minSpacing * 1.1,
-      smoothing: 0.35,
-    });
+    // Smoothing is an improvement, not a requirement. If it cannot be done —
+    // a compute process died, a worker never started — the raw samples are
+    // still a perfectly good stroke, and a slightly rougher line is a far
+    // better outcome than silently losing what somebody just drew.
+    let processed = samples;
+    try {
+      const result = await session.ops.run('processStroke', {
+        samples,
+        simplifyTolerance: this.minSpacing * 0.4,
+        spacing: this.minSpacing * 1.1,
+        smoothing: 0.35,
+      });
+      if (result.samples.length >= 2) processed = result.samples;
+    } catch (error) {
+      console.warn('Could not smooth that stroke; keeping it as drawn.', error);
+    }
 
     if (processed.length < 2) return;
 

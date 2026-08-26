@@ -22,4 +22,15 @@ contextBridge.exposeInMainWorld('wispDesktop', {
     addresses: string[];
     load: { running: number; queued: number; workers: number };
   }> => ipcRenderer.invoke('wisp:host-info'),
+
+  hostState: (): Promise<unknown> => ipcRenderer.invoke('wisp:host-state'),
+  startHost: (): Promise<unknown> => ipcRenderer.invoke('wisp:host-start'),
+  stopHost: (): Promise<unknown> => ipcRenderer.invoke('wisp:host-stop'),
+
+  /** Pushed whenever a device connects, pairs, or finishes a job. */
+  onHostChanged: (listener: (state: unknown) => void): (() => void) => {
+    const handler = (_event: unknown, state: unknown): void => listener(state);
+    ipcRenderer.on('wisp:host-changed', handler);
+    return () => ipcRenderer.off('wisp:host-changed', handler);
+  },
 });

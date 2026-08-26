@@ -66,6 +66,15 @@ import { BOOLEAN_LABELS, evaluateBoolean, type BooleanOp } from '../tools/boolea
 import { rebuildShape } from '../tools/shapeTool.js';
 import { WorkerOpRunner } from '../ops/workerRunner.js';
 import { DesktopOpRunner, isDesktop } from '../ops/desktopRunner.js';
+import { LinkOpRunner, type LinkStatus } from '../ops/linkRunner.js';
+import {
+  deviceName,
+  hostLinkUrl,
+  pairingDeclined,
+  readPairing,
+  rememberPairing,
+  rememberPairingDeclined,
+} from './hostLink.js';
 import {
   SCENE_THEMES,
   applyTheme,
@@ -239,6 +248,15 @@ interface AppState {
    * looks like it ignored you.
    */
   busy: string | null;
+  /**
+   * Set when this page came from a desktop host and is not linked yet.
+   *
+   * A tablet that merely *loaded* the app from a PC is still doing all its own
+   * work; pairing is what moves the heavy jobs across, and that is worth
+   * asking about rather than assuming.
+   */
+  linkOffer: boolean;
+  linkStatus: LinkStatus | 'off';
   /** Filter text for the sketch library. */
   librarySearch: string;
   librarySort: 'recent' | 'name';
@@ -315,6 +333,8 @@ interface AppState {
   pickColorAt: (id: string) => void;
   setEyedropper: (active: boolean) => void;
   noticeTouchWithoutPen: () => void;
+  connectToHost: (code: string) => void;
+  dismissLinkOffer: () => void;
   dismissFingerOffer: (enableDrawing: boolean) => void;
 
   mergeLayerDown: (layerId: string) => void;
@@ -389,6 +409,8 @@ export const useStore = create<AppState>((set, get) => ({
   reference: null,
   eyedropper: false,
   offerFingerDrawing: false,
+  linkOffer: false,
+  linkStatus: 'off',
   busy: null,
   librarySearch: '',
   librarySort: 'recent',
@@ -634,6 +656,14 @@ export const useStore = create<AppState>((set, get) => ({
       ? // Falls back to a worker in this page if a compute process dies.
         new DesktopOpRunner(new WorkerOpRunner())
       : new WorkerOpRunner();
+
+    // Served by a desktop host? Offer to send the slow work back to it. A
+    // remembered code reconnects without asking again.
+    if (!isDesktop() && hostLinkUrl()) {
+      const saved = readPairing();
+      if (saved) get().connectToHost(saved);
+      else if (!pairingDeclined()) set({ linkOffer: true });
+    }
 
     set({ themePreference: readThemePreference() });
     get().syncResolvedTheme();
@@ -1147,6 +1177,39 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setEyedropper: (eyedropper) => set({ eyedropper }),
+
+  /**
+   * Pairs with the desktop that served this page.
+   *
+   * The link runner keeps the local worker as its fallback, so a dropped
+   * connection costs responsiveness rather than the ability to work.
+   */
+  connectToHost: (code) => {
+    const url = hostLinkUrl();
+    if (!url) return;
+
+    set({ linkStatus: 'connecting' });
+    const runner = new LinkOpRunner(
+      url,
+      code,
+      deviceName(),
+      new WorkerOpRunner(),
+      (status) => {
+        set({ linkStatus: status });
+        if (status === 'linked') {
+          rememberPairing(code);
+          set({ linkOffer: false, statusMessage: 'Heavy work now runs on the PC.' });
+        }
+      },
+    );
+    session.ops.dispose?.();
+    session.ops = runner;
+  },
+
+  dismissLinkOffer: () => {
+    rememberPairingDeclined();
+    set({ linkOffer: false });
+  },
 
   /** Raised by the gesture layer; only ever offered once per session. */
   noticeTouchWithoutPen: () => {

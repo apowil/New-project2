@@ -19,10 +19,17 @@ interface DesktopBridge {
     addresses: string[];
     load: { running: number; queued: number; workers: number };
   }>;
+  hostState: () => Promise<unknown>;
+  startHost: () => Promise<unknown>;
+  stopHost: () => Promise<unknown>;
+  onHostChanged: (listener: (state: unknown) => void) => () => void;
 }
 
 const bridge = (): DesktopBridge | null =>
   (globalThis as { wispDesktop?: DesktopBridge }).wispDesktop ?? null;
+
+/** The desktop bridge, for the parts of the UI that only exist there. */
+export const desktopBridge = bridge;
 
 /** True when running inside the desktop app rather than a browser. */
 export const isDesktop = (): boolean => bridge() !== null;

@@ -4,6 +4,7 @@ import { SCENE_SCALES, UNITS, type SceneScale } from '@wisp/core';
 
 import { useStore } from '../state/store.js';
 import { type ThemePreference } from '../state/theme.js';
+import { HostPanel } from './HostPanel.js';
 import { MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from './Icons.js';
 
 const THEMES: Array<{ id: ThemePreference; label: string; Icon: typeof SunIcon }> = [
@@ -61,7 +62,7 @@ export function SettingsPanel() {
 
       {open && (
         <div
-          className="panel absolute right-0 top-full z-50 mt-2 flex w-56 flex-col gap-3 p-3"
+          className="panel absolute right-0 top-full z-50 mt-2 flex max-h-[min(32rem,calc(100vh-6rem))] w-60 flex-col gap-3 overflow-y-auto p-3"
           role="dialog"
           aria-label="Settings"
         >
@@ -158,6 +159,8 @@ export function SettingsPanel() {
                 className="accent-[var(--color-accent)]"
               />
           </label>
+
+          <HostPanel />
         </div>
       )}
     </div>

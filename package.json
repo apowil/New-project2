@@ -12,7 +12,7 @@
     "dev": "npm run dev --workspace @wisp/studio",
     "build": "npm run build --workspace @wisp/core && npm run build --workspace @wisp/studio",
     "preview": "npm run preview --workspace @wisp/studio",
-    "typecheck": "npm run typecheck --workspace @wisp/core && npm run typecheck --workspace @wisp/studio",
+    "typecheck": "npm run typecheck --workspace @wisp/core && npm run typecheck --workspace @wisp/studio && npm run typecheck --workspace @wisp/desktop",
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",

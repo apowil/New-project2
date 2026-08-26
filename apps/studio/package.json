@@ -14,6 +14,7 @@
   "dependencies": {
     "@wisp/core": "*",
     "@wisp/ops": "*",
+    "qrcode-generator": "^1.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.185.0",

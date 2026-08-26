@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Wisp desktop \u2014 runs the studio natively and can host it for tablets on the same network.",
+  "description": "Wisp desktop — runs the studio natively and can host it for tablets on the same network.",
   "main": "dist/main.js",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -16,7 +16,10 @@
     "@wisp/ops": "*"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "electron": "^33.4.11",
+    "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
     "esbuild": "^0.25.0",
     "ws": "^8.21.3"
   }

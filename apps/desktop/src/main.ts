@@ -5,6 +5,7 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { type OpName, type OpRequestMap } from '@wisp/core';
 
 import { ComputePool, computeWorkerPath } from './computePool.js';
+import { Host } from './host.js';
 import { startStaticHost, type StaticHost } from './server.js';
 
 /**
@@ -20,16 +21,23 @@ const here = dirname(fileURLToPath(import.meta.url));
 const STUDIO_ROOT = join(here, '..', 'studio');
 
 let window: BrowserWindow | null = null;
-let host: StaticHost | null = null;
+let localServer: StaticHost | null = null;
 let pool: ComputePool | null = null;
+let host: Host | null = null;
 
 async function createWindow(): Promise<void> {
   pool = new ComputePool(computeWorkerPath(here));
 
+  // The host serves the same studio build to other devices and runs their
+  // heavy jobs on this machine's pool. It stays off until switched on.
+  host = new Host(STUDIO_ROOT, pool, () => {
+    window?.webContents.send('wisp:host-changed', host?.state ?? null);
+  });
+
   // Port 0 asks the operating system for a free one, so a second copy of the
   // app — or anything else already on our preferred port — does not stop it
   // starting.
-  host = await startStaticHost({ root: STUDIO_ROOT, port: 0, host: '127.0.0.1' });
+  localServer = await startStaticHost({ root: STUDIO_ROOT, port: 0, host: '127.0.0.1' });
 
   window = new BrowserWindow({
     width: 1440,
@@ -57,7 +65,7 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' };
   });
 
-  await window.loadURL(`http://127.0.0.1:${host.port}/`);
+  await window.loadURL(`http://127.0.0.1:${localServer.port}/`);
 }
 
 /**
@@ -74,9 +82,21 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle('wisp:host-state', () => host?.state ?? null);
+
+ipcMain.handle('wisp:host-start', async () => {
+  if (!host) throw new Error('The host is not available.');
+  return host.start();
+});
+
+ipcMain.handle('wisp:host-stop', async () => {
+  if (!host) throw new Error('The host is not available.');
+  return host.stop();
+});
+
 ipcMain.handle('wisp:host-info', () => ({
-  port: host?.port ?? 0,
-  addresses: host?.addresses ?? [],
+  port: localServer?.port ?? 0,
+  addresses: localServer?.addresses ?? [],
   load: pool?.load ?? { running: 0, queued: 0, workers: 0 },
 }));
 
@@ -100,5 +120,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   pool?.dispose();
-  void host?.close();
+  void host?.stop();
+  void localServer?.close();
 });

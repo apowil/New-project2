@@ -12,6 +12,7 @@ import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
 import { FingerOffer } from './ui/FingerOffer.js';
+import { LinkPrompt } from './ui/LinkPrompt.js';
 import { HintBar } from './ui/HintBar.js';
 import { Marquee, SelectionContextBar } from './ui/SelectionContextBar.js';
 import { ShapePanel } from './ui/ShapePanel.js';
@@ -381,6 +382,7 @@ export function App() {
         />
         <ReferenceOverlay />
         <FingerOffer />
+        <LinkPrompt />
         <StatusToast />
         <ProjectsPanel />
       </div>

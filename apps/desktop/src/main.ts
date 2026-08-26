@@ -7,6 +7,7 @@ import { type OpName, type OpRequestMap } from '@wisp/core';
 import { ComputePool, computeWorkerPath } from './computePool.js';
 import { Host } from './host.js';
 import { startStaticHost, type StaticHost } from './server.js';
+import { CHECK_INTERVAL_MS, FIRST_CHECK_DELAY_MS, Updates } from './updates.js';
 
 /**
  * The desktop app.
@@ -24,6 +25,8 @@ let window: BrowserWindow | null = null;
 let localServer: StaticHost | null = null;
 let pool: ComputePool | null = null;
 let host: Host | null = null;
+let updates: Updates | null = null;
+let updateTimer: NodeJS.Timeout | null = null;
 
 async function createWindow(): Promise<void> {
   pool = new ComputePool(computeWorkerPath(here));
@@ -32,6 +35,10 @@ async function createWindow(): Promise<void> {
   // heavy jobs on this machine's pool. It stays off until switched on.
   host = new Host(STUDIO_ROOT, pool, () => {
     window?.webContents.send('wisp:host-changed', host?.state ?? null);
+  });
+
+  updates = new Updates(app.isPackaged, (state) => {
+    window?.webContents.send('wisp:update-changed', state);
   });
 
   // Port 0 asks the operating system for a free one, so a second copy of the
@@ -66,6 +73,11 @@ async function createWindow(): Promise<void> {
   });
 
   await window.loadURL(`http://127.0.0.1:${localServer.port}/`);
+
+  // Not at once: the first twenty seconds belong to opening a sketch, not to a
+  // network round trip nobody asked for.
+  setTimeout(() => void updates?.check(), FIRST_CHECK_DELAY_MS);
+  updateTimer = setInterval(() => void updates?.check(), CHECK_INTERVAL_MS);
 }
 
 /**
@@ -94,6 +106,23 @@ ipcMain.handle('wisp:host-stop', async () => {
   return host.stop();
 });
 
+ipcMain.handle('wisp:update-state', () => ({
+  ...(updates?.current ?? null),
+  installed: app.getVersion(),
+}));
+
+ipcMain.handle('wisp:update-check', async () => updates?.check() ?? null);
+
+/**
+ * Quits and relaunches into the new version.
+ *
+ * The renderer asks for this only after saving, because the window is about to
+ * close whether or not anything was written.
+ */
+ipcMain.handle('wisp:update-install', () => {
+  updates?.install();
+});
+
 ipcMain.handle('wisp:host-info', () => ({
   port: localServer?.port ?? 0,
   addresses: localServer?.addresses ?? [],
@@ -119,6 +148,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (updateTimer) clearInterval(updateTimer);
   pool?.dispose();
   void host?.stop();
   void localServer?.close();

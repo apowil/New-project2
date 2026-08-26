@@ -24,7 +24,10 @@ const common = {
   platform: 'node',
   target: 'node20',
   sourcemap: true,
-  external: ['electron'],
+  // `electron` is provided by the runtime. `electron-updater` is left alone
+  // too: it reads `app-update.yml` out of the installed app's resources and
+  // expects to find itself in node_modules, which bundling would take away.
+  external: ['electron', 'electron-updater'],
   logLevel: 'info',
 };
 

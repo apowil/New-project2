@@ -33,4 +33,14 @@ contextBridge.exposeInMainWorld('wispDesktop', {
     ipcRenderer.on('wisp:host-changed', handler);
     return () => ipcRenderer.off('wisp:host-changed', handler);
   },
+
+  updateState: (): Promise<unknown> => ipcRenderer.invoke('wisp:update-state'),
+  checkForUpdate: (): Promise<unknown> => ipcRenderer.invoke('wisp:update-check'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('wisp:update-install'),
+
+  onUpdateChanged: (listener: (state: unknown) => void): (() => void) => {
+    const handler = (_event: unknown, state: unknown): void => listener(state);
+    ipcRenderer.on('wisp:update-changed', handler);
+    return () => ipcRenderer.off('wisp:update-changed', handler);
+  },
 });

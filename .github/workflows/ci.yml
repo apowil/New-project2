@@ -21,28 +21,22 @@ jobs:
       - run: npm ci
 
       - name: Typecheck
-        run: |
-          npm run typecheck --workspace @wisp/core
-          npm run typecheck --workspace @wisp/studio
+        run: npm run typecheck
 
       - name: Unit tests
         run: npx vitest run
 
       - name: Build
-        run: npm run build --workspace @wisp/studio
+        run: |
+          npm run build --workspace @wisp/studio
+          npm run build --workspace @wisp/desktop
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      # Electron needs a display even when it never shows a window, and the
+      # desktop and host-mode suites launch the real app rather than a mock.
       - name: End-to-end tests
-        run: npx playwright test
+        run: xvfb-run -a npx playwright test
         env:
           CI: "1"
-
-      - name: Upload report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7

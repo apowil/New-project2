@@ -68,6 +68,13 @@ import { WorkerOpRunner } from '../ops/workerRunner.js';
 import { DesktopOpRunner, isDesktop } from '../ops/desktopRunner.js';
 import { LinkOpRunner, type LinkStatus } from '../ops/linkRunner.js';
 import {
+  IDLE,
+  versionKey,
+  watchForUpdates,
+  type UpdateSource,
+  type UpdateState,
+} from './updates.js';
+import {
   deviceName,
   hostLinkUrl,
   pairingDeclined,
@@ -149,6 +156,14 @@ class SketchSession {
 }
 
 export const session = new SketchSession();
+
+/**
+ * Whatever can tell us a newer Wisp exists, once `boot` has looked.
+ *
+ * Module-level rather than in the store because it is a live subscription, not
+ * a value to render — the store holds what it reports.
+ */
+let updateSource: UpdateSource | null = null;
 
 /**
  * Camera actions, registered by the app once the viewport exists.
@@ -257,6 +272,11 @@ interface AppState {
    */
   linkOffer: boolean;
   linkStatus: LinkStatus | 'off';
+
+  /** What is known about a newer Wisp, whichever way this copy is installed. */
+  update: UpdateState;
+  /** Set once the offer has been waved away, until a newer one turns up. */
+  updateDismissed: string | null;
   /** Filter text for the sketch library. */
   librarySearch: string;
   librarySort: 'recent' | 'name';
@@ -335,6 +355,9 @@ interface AppState {
   noticeTouchWithoutPen: () => void;
   connectToHost: (code: string) => void;
   dismissLinkOffer: () => void;
+  checkForUpdate: () => void;
+  applyUpdate: () => void;
+  dismissUpdate: () => void;
   dismissFingerOffer: (enableDrawing: boolean) => void;
 
   mergeLayerDown: (layerId: string) => void;
@@ -411,6 +434,8 @@ export const useStore = create<AppState>((set, get) => ({
   offerFingerDrawing: false,
   linkOffer: false,
   linkStatus: 'off',
+  update: IDLE,
+  updateDismissed: null,
   busy: null,
   librarySearch: '',
   librarySort: 'recent',
@@ -664,6 +689,11 @@ export const useStore = create<AppState>((set, get) => ({
       if (saved) get().connectToHost(saved);
       else if (!pairingDeclined()) set({ linkOffer: true });
     }
+
+    // A newer version may already be waiting; nothing installs itself, so the
+    // only thing this can do is put a banner up. Dismissal is remembered
+    // against the version declined, so a later one asks again on its own.
+    updateSource ??= watchForUpdates((update) => set({ update }));
 
     set({ themePreference: readThemePreference() });
     get().syncResolvedTheme();
@@ -1210,6 +1240,29 @@ export const useStore = create<AppState>((set, get) => ({
     rememberPairingDeclined();
     set({ linkOffer: false });
   },
+
+  checkForUpdate: () => updateSource?.check(),
+
+  /**
+   * Takes the update.
+   *
+   * Both channels end this session — the desktop app quits and relaunches, the
+   * web app reloads — so the open sketch is written first. Losing work to an
+   * update would be a strange way to deliver an improvement.
+   */
+  applyUpdate: () => {
+    void (async () => {
+      try {
+        await get().saveNow();
+      } catch {
+        // Better a lost autosave than a machine stuck on an old version; the
+        // sketch is still in the document store from its last write.
+      }
+      updateSource?.apply();
+    })();
+  },
+
+  dismissUpdate: () => set((state) => ({ updateDismissed: versionKey(state.update) })),
 
   /** Raised by the gesture layer; only ever offered once per session. */
   noticeTouchWithoutPen: () => {

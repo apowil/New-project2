@@ -18,6 +18,7 @@ import { Marquee, SelectionContextBar } from './ui/SelectionContextBar.js';
 import { ShapePanel } from './ui/ShapePanel.js';
 import { TextPrompt } from './ui/TextPrompt.js';
 import { StatusToast } from './ui/StatusToast.js';
+import { UpdateBanner } from './ui/UpdateBanner.js';
 import { StyleBar } from './ui/StyleBar.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { watchSystemTheme } from './state/theme.js';
@@ -383,6 +384,7 @@ export function App() {
         <ReferenceOverlay />
         <FingerOffer />
         <LinkPrompt />
+        <UpdateBanner />
         <StatusToast />
         <ProjectsPanel />
       </div>

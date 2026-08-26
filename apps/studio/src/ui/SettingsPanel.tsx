@@ -6,6 +6,7 @@ import { useStore } from '../state/store.js';
 import { type ThemePreference } from '../state/theme.js';
 import { HostPanel } from './HostPanel.js';
 import { MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from './Icons.js';
+import { UpdateSection } from './UpdateBanner.js';
 
 const THEMES: Array<{ id: ThemePreference; label: string; Icon: typeof SunIcon }> = [
   { id: 'light', label: 'Light', Icon: SunIcon },
@@ -161,6 +162,7 @@ export function SettingsPanel() {
           </label>
 
           <HostPanel />
+          <UpdateSection />
         </div>
       )}
     </div>

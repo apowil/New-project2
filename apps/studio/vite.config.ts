@@ -8,7 +8,12 @@ export default defineConfig({
     react(),
     tailwind(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt', not 'autoUpdate': autoUpdate reloads the page the moment a
+      // new worker takes over, and a reload in the middle of a stroke is not a
+      // trade worth making for a version that could just as well arrive when
+      // somebody says so.
+      registerType: 'prompt',
+      injectRegister: null,
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Wisp — 3D Sketch',

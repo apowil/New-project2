@@ -1,0 +1,55 @@
+# How Wisp becomes something a person can install, and keep current.
+#
+# Two things here are load-bearing for updates. `publish` tells both the build
+# (where to upload) and the installed app (where to look) — electron-builder
+# writes it into `app-update.yml` inside the package, which is the only reason
+# electron-updater knows anything. And `nsis.oneClick: false` keeps the
+# installer per-user by default, so updating never needs an administrator
+# prompt that an ordinary user cannot answer.
+
+appId: art.wisp.studio
+productName: Wisp
+copyright: Wisp
+
+directories:
+  output: release
+  buildResources: build
+
+# The main process is already bundled by esbuild, so only its output, the
+# studio build it serves, and the one dependency that must stay unbundled.
+files:
+  - dist/**/*
+  - studio/**/*
+  - package.json
+
+publish:
+  provider: github
+  owner: percepdyne
+  repo: New-project2
+  # Prereleases stay invisible to installed copies until they are promoted.
+  releaseType: release
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-${version}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # Wisp's own updater replaces the app; the installer must not also try.
+  differentialPackage: true
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Graphics
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.graphics-design

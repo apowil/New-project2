@@ -9,17 +9,18 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "npm run build && electron .",
-    "package": "npm run build && electron-builder --publish never"
+    "package": "npm run build && electron-builder --publish never",
+    "release": "npm run build && electron-builder --publish always"
   },
   "dependencies": {
     "@wisp/core": "*",
-    "@wisp/ops": "*"
+    "@wisp/ops": "*",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
     "electron": "^33.4.11",
     "electron-builder": "^26.15.3",
-    "electron-updater": "^6.8.9",
     "esbuild": "^0.25.0",
     "ws": "^8.21.3"
   }

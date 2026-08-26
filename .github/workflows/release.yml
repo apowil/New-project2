@@ -1,0 +1,89 @@
+name: Release
+
+# Cutting a release is what makes updating possible at all: the installed app
+# asks GitHub Releases what the newest version is, and believes the answer.
+# Nothing here is triggered by an ordinary push — a tag is a deliberate act.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. 0.2.0. Publishes a draft."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    # Each installer has to be produced on the system it targets: NSIS needs
+    # Windows, and a dmg needs macOS to sign anything at all.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: ubuntu-latest
+            name: Linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Stamp the version
+        # electron-updater compares against this and nothing else, so a
+        # release that forgets it would install itself over and over.
+        shell: bash
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME#v}"; fi
+          npm version "$version" --no-git-tag-version --workspace @wisp/desktop
+          npm version "$version" --no-git-tag-version --allow-same-version
+
+      - name: Build the studio
+        run: npm run build --workspace @wisp/studio
+
+      - name: Build and publish the desktop app
+        run: npm run release --workspace @wisp/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The tablet build is a static site plus a service worker; publishing it as a
+  # release asset is what lets somebody host it themselves, and what the
+  # Android shell packages.
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the studio
+        run: npm run build --workspace @wisp/studio
+
+      - name: Bundle it
+        run: |
+          cd apps/studio/dist
+          zip -r ../../../wisp-web.zip .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: wisp-web.zip

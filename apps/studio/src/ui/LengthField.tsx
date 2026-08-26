@@ -8,6 +8,7 @@ interface LengthFieldProps {
   unit: Unit;
   onCommit: (metres: number) => void;
   min?: number;
+  max?: number;
   disabled?: boolean;
 }
 
@@ -24,6 +25,7 @@ export function LengthField({
   unit,
   onCommit,
   min = 0,
+  max = Number.POSITIVE_INFINITY,
   disabled,
 }: LengthFieldProps) {
   const [draft, setDraft] = useState(() => formatLength(value, unit, false));
@@ -41,7 +43,7 @@ export function LengthField({
       setDraft(formatLength(value, unit, false));
       return;
     }
-    onCommit(Math.max(metres, min));
+    onCommit(Math.min(Math.max(metres, min), max));
   };
 
   return (

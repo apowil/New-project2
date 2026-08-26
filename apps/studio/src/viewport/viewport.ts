@@ -4,6 +4,8 @@ import {
   buildDimension,
   buildStrokeGeometry,
   geometryOptions,
+  sceneScaleSpec,
+  type SceneScale,
   visibleNodes,
   type AnnotationNode,
   type BakedMeshNode,
@@ -74,6 +76,7 @@ export class Viewport {
   /** Kept so a unit change can redraw dimensions without waiting for an edit. */
   private lastDocument: SketchDocument | null = null;
   private unit: Unit = 'm';
+  private scale: SceneScale = 'interior';
   private resizeObserver: ResizeObserver | null = null;
 
   /** Set by the app so the render loop can advance an in-progress stroke. */
@@ -136,6 +139,41 @@ export class Viewport {
     this.rebuildGrid(SCENE_THEMES[this.theme]);
   }
 
+  /**
+   * Re-sizes the world to suit what is being drawn.
+   *
+   * A forty-metre grid and a six-metre camera are right for a room and absurd
+   * for a door handle, where one screen pixel would span seven millimetres and
+   * a fine line could not be seen at all.
+   */
+  setScale(scale: SceneScale): void {
+    const spec = sceneScaleSpec(scale);
+    if (this.scale === scale) return;
+    this.scale = scale;
+
+    this.camera.minRadius = spec.minDistance;
+    this.camera.maxRadius = spec.maxDistance;
+    this.scene.fog = new THREE.Fog(
+      SCENE_THEMES[this.theme].fog,
+      spec.cameraDistance * 4,
+      spec.cameraDistance * 18,
+    );
+    this.rebuildGrid(SCENE_THEMES[this.theme]);
+    this.requestRender();
+  }
+
+  /** Puts the camera where a fresh sketch at this scale should start. */
+  frameForScale(scale: SceneScale): void {
+    const spec = sceneScaleSpec(scale);
+    this.camera.setView(
+      Math.PI * 0.25,
+      Math.PI * 0.36,
+      spec.cameraDistance,
+      new THREE.Vector3(0, spec.cameraDistance * 0.1, 0),
+    );
+    this.requestRender();
+  }
+
   private rebuildGrid(palette: SceneTheme): void {
     if (this.grid) {
       this.scene.remove(this.grid);
@@ -145,7 +183,13 @@ export class Viewport {
 
     // GridHelper bakes its colours into vertex data, so a theme change means
     // building a new one rather than tweaking a material.
-    const grid = new THREE.GridHelper(40, 40, palette.gridMajor, palette.gridMinor);
+    const spec = sceneScaleSpec(this.scale);
+    const grid = new THREE.GridHelper(
+      spec.gridSize,
+      spec.gridDivisions,
+      palette.gridMajor,
+      palette.gridMinor,
+    );
     const material = grid.material as THREE.Material;
     material.transparent = true;
     material.opacity = palette.gridOpacity;

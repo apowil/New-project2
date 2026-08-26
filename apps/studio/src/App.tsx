@@ -11,6 +11,7 @@ import { LayersPanel } from './ui/LayersPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
+import { FingerOffer } from './ui/FingerOffer.js';
 import { HintBar } from './ui/HintBar.js';
 import { Marquee, SelectionContextBar } from './ui/SelectionContextBar.js';
 import { ShapePanel } from './ui/ShapePanel.js';
@@ -98,6 +99,13 @@ export function App() {
       renderImage: (format, scale) => viewport.renderImage(format, scale),
       renderSvg: () => viewport.renderSvg(),
       setUnit: (unit) => viewport.setUnit(unit),
+      worldPerPixel: () => viewport.camera.worldPerPixel(canvas.clientHeight),
+      setScale: (scale) => viewport.setScale(scale),
+      frameForScale: (scale) => viewport.frameForScale(scale),
+      facePlane: (normal, pointOnPlane) => {
+        viewport.camera.faceNormal(normal, pointOnPlane);
+        viewport.requestRender();
+      },
     });
     const detachAutoSave = autoSaver.attach();
 
@@ -341,7 +349,13 @@ export function App() {
 
         {/* Panels follow the tool: what is on screen is what the current tool
             can actually do, rather than everything at once. */}
-        {(tool === 'draw' || tool === 'plane' || tool === 'shape') && (
+        {/* Text and dimensions are placed on the sketch plane too, so the
+            controls for it have to be reachable while those tools are up. */}
+        {(tool === 'draw' ||
+          tool === 'plane' ||
+          tool === 'shape' ||
+          tool === 'text' ||
+          tool === 'dimension') && (
           <div className="absolute bottom-4 left-4 flex flex-col gap-3">
             {tool === 'shape' && (
               <ShapePanel onFinish={(closed) => controllerRef.current?.finishShape(closed)} />
@@ -366,6 +380,7 @@ export function App() {
           }
         />
         <ReferenceOverlay />
+        <FingerOffer />
         <StatusToast />
         <ProjectsPanel />
       </div>

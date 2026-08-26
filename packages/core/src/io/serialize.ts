@@ -10,6 +10,7 @@ import {
   type StrokeStyle,
 } from '../document/types.js';
 import { type StrokeSample } from '../stroke/resample.js';
+import { SCENE_SCALES, type SceneScale } from '../document/scale.js';
 import { vec3, type Vec3 } from '../math/vec3.js';
 import {
   SAMPLE_STRIDE,
@@ -128,6 +129,7 @@ export function serializeDocument(doc: SketchDocument): ArrayBuffer {
   const manifest: WispManifest = {
     id: doc.id,
     name: doc.name,
+    ...(doc.scale ? { scale: doc.scale } : {}),
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     activeLayerId: doc.activeLayerId,
@@ -252,9 +254,12 @@ export function deserializeDocument(buffer: ArrayBuffer): SketchDocument {
     ? manifest.activeLayerId
     : (layers[0]?.id ?? '');
 
+  const scale = SCENE_SCALES[manifest.scale as SceneScale] ? (manifest.scale as SceneScale) : undefined;
+
   return {
     id: String(manifest.id ?? ''),
     name: String(manifest.name ?? 'Untitled sketch'),
+    ...(scale ? { scale } : {}),
     revision: 0,
     layers,
     activeLayerId,

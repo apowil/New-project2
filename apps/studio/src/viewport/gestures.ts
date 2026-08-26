@@ -36,6 +36,14 @@ export interface StrokeInput {
 }
 
 export interface GestureHandlers {
+  /**
+   * A finger orbited the camera on a device that has never seen a pen.
+   *
+   * Raised so the app can offer to switch, because the default — pen draws,
+   * finger orbits — leaves somebody without a stylus unable to draw at all,
+   * with the setting that fixes it buried behind a gear icon.
+   */
+  onTouchOrbitedWithoutPen?(): void;
   onStrokeStart(input: StrokeInput): void;
   /** Receives every coalesced sample, oldest first — do not drop these. */
   onStrokeMove(inputs: StrokeInput[]): void;
@@ -222,6 +230,10 @@ export class InputRouter {
           this.lastX = event.clientX;
           this.lastY = event.clientY;
           this.beginLongPress(event.clientX, event.clientY);
+
+          // Never seen a pen, and a finger just moved the camera: this device
+          // probably has no stylus, and drawing is currently impossible.
+          if (this.penLastSeen === 0) this.handlers.onTouchOrbitedWithoutPen?.();
         }
         return;
       }

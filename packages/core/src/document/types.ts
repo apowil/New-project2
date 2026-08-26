@@ -1,4 +1,5 @@
 import { type Vec3 } from '../math/vec3.js';
+import { type SceneScale } from './scale.js';
 import { type ShapeParams } from '../shapes/shapes.js';
 import { type StrokeSample } from '../stroke/resample.js';
 
@@ -23,6 +24,37 @@ export interface StrokeStyle {
   /** Width at zero pressure, as a fraction of `width`. */
   minPressureScale: number;
 }
+
+/**
+ * How fine and how broad a stroke may be, in metres.
+ *
+ * The span is deliberately enormous — 0.1 mm to half a metre — because the
+ * same app has to draw a product detail and a room. A technical pen is around
+ * 0.2 mm, so the floor sits below that rather than at it; anything finer stops
+ * being a line and starts being a rounding error against float32 coordinates.
+ *
+ * A range this wide cannot be a linear slider: 0.2 mm and 0.4 mm are worlds
+ * apart to a draughtsman and one pixel apart on a linear scale. See
+ * {@link widthFromSlider}.
+ */
+export const MIN_STROKE_WIDTH = 0.0001;
+export const MAX_STROKE_WIDTH = 0.5;
+
+/**
+ * Maps a 0..1 slider position onto a width, geometrically.
+ *
+ * Equal travel gives equal *ratio* rather than equal difference, so the fine
+ * end gets as much of the slider as the broad end. Linearly, everything below
+ * a centimetre would share the first two percent of the track.
+ */
+export const widthFromSlider = (t: number): number =>
+  MIN_STROKE_WIDTH * (MAX_STROKE_WIDTH / MIN_STROKE_WIDTH) ** Math.min(Math.max(t, 0), 1);
+
+/** The inverse, for putting the handle where the current width says it is. */
+export const sliderFromWidth = (width: number): number => {
+  const clamped = Math.min(Math.max(width, MIN_STROKE_WIDTH), MAX_STROKE_WIDTH);
+  return Math.log(clamped / MIN_STROKE_WIDTH) / Math.log(MAX_STROKE_WIDTH / MIN_STROKE_WIDTH);
+};
 
 export const DEFAULT_STROKE_STYLE: StrokeStyle = {
   color: '#d8d2c8',
@@ -164,6 +196,12 @@ export interface Layer {
 export interface SketchDocument {
   id: string;
   name: string;
+  /**
+   * The size of thing this sketch is of. Stored with the document because a
+   * product study and a floor plan want different defaults, and reopening one
+   * should put you back at the scale you were working at.
+   */
+  scale?: SceneScale;
   /** Bumped on every mutation so views can diff cheaply against a snapshot. */
   revision: number;
   layers: Layer[];

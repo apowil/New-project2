@@ -1,7 +1,7 @@
-import { formatLength } from '@wisp/core';
+import { formatLength, sceneScaleSpec } from '@wisp/core';
 
-import { useStore } from '../state/store.js';
-import { type PlaneMode } from '../viewport/sketchPlane.js';
+import { getViewActions, useStore } from '../state/store.js';
+import { PLANE_NORMALS, type PlaneMode } from '../viewport/sketchPlane.js';
 
 const MODES: Array<{ id: PlaneMode; label: string; hint: string }> = [
   { id: 'camera', label: 'Facing', hint: 'A plane facing you — draw what you see' },
@@ -18,6 +18,21 @@ export function PlanePanel() {
   const showIndicator = useStore((state) => state.showPlaneIndicator);
   const unit = useStore((state) => state.unit);
   const setShowIndicator = useStore((state) => state.setShowPlaneIndicator);
+  const sceneScale = useStore((state) => state.sceneScale);
+  const range = sceneScaleSpec(sceneScale).planeRange;
+
+  // Turning the camera to face the plane is what makes a drag mean what it
+  // looks like: viewed obliquely, a square gesture lands as a squashed
+  // parallelogram and the same movement covers a different distance.
+  const faceIt = (mode = plane.mode, offset = plane.offset) => {
+    const normal = PLANE_NORMALS[mode];
+    if (!normal) return;
+    getViewActions()?.facePlane(normal, {
+      x: normal.x * offset,
+      y: normal.y * offset,
+      z: normal.z * offset,
+    });
+  };
 
   return (
     <div className="panel pointer-events-auto flex w-56 flex-col gap-3 p-3">
@@ -40,7 +55,14 @@ export function PlanePanel() {
             key={id}
             type="button"
             title={hint}
-            onClick={() => setPlaneMode(id)}
+            onClick={() => {
+              setPlaneMode(id);
+              // Fixed planes can be faced straight away; 'facing' already is,
+              // and 'surface' has no normal until something is tapped.
+              // The offset resets to zero when the mode changes, so face the
+              // plane at its new position rather than the old one.
+              faceIt(id, 0);
+            }}
             className="chip"
             data-active={plane.mode === id}
           >
@@ -56,21 +78,32 @@ export function PlanePanel() {
         </span>
         <input
           type="range"
-          min={-4}
-          max={4}
-          step={0.02}
+          min={-range}
+          max={range}
+          step={range / 200}
           value={plane.offset}
           onChange={(event) => setPlaneOffset(Number(event.target.value))}
         />
       </label>
 
-      <button
-        type="button"
-        onClick={() => setPlaneOffset(0)}
-        className="rounded-lg py-1.5 text-xs text-muted transition-colors hover:bg-line/60 hover:text-secondary"
-      >
-        Reset depth
-      </button>
+      <div className="grid grid-cols-2 gap-1">
+        <button
+          type="button"
+          onClick={() => setPlaneOffset(0)}
+          className="rounded-lg py-1.5 text-xs text-muted transition-colors hover:bg-line/60 hover:text-secondary"
+        >
+          Reset depth
+        </button>
+        <button
+          type="button"
+          onClick={() => faceIt()}
+          disabled={!PLANE_NORMALS[plane.mode]}
+          title="Turn the camera to look straight at this plane"
+          className="rounded-lg py-1.5 text-xs text-muted transition-colors hover:bg-line/60 hover:text-secondary disabled:opacity-30"
+        >
+          Face it
+        </button>
+      </div>
 
       <MirrorRow />
     </div>

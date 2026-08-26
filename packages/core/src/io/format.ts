@@ -110,6 +110,8 @@ export type ManifestNode =
 export interface WispManifest {
   id: string;
   name: string;
+  /** Working scale, absent in files written before it existed. */
+  scale?: string;
   createdAt: number;
   updatedAt: number;
   activeLayerId: string;

@@ -55,12 +55,72 @@ export class OrbitCamera {
   }
 
   /**
+   * Turns the camera to look squarely along a plane's normal.
+   *
+   * Drawing on a plane you are viewing obliquely is the root of most of what
+   * makes sketching in space feel unpredictable: a square drag lands as a
+   * squashed parallelogram, and the same movement covers a different distance
+   * depending on the angle. Facing the plane makes screen space and plane
+   * space agree again.
+   */
+  faceNormal(
+    normal: { x: number; y: number; z: number },
+    pointOnPlane?: { x: number; y: number; z: number },
+  ): void {
+    const length = Math.hypot(normal.x, normal.y, normal.z);
+    if (length < 1e-6) return;
+
+    const x = normal.x / length;
+    const y = normal.y / length;
+    const z = normal.z / length;
+
+    // Look *at* the plane, not merely along its normal. The orbit target sits
+    // above the origin, so without this a horizontal plane ends up further
+    // from the camera than a vertical one and the same drag draws a different
+    // size on each — the very inconsistency facing the plane is meant to fix.
+    if (pointOnPlane) {
+      const toTarget = {
+        x: this.targetGoal.x - pointOnPlane.x,
+        y: this.targetGoal.y - pointOnPlane.y,
+        z: this.targetGoal.z - pointOnPlane.z,
+      };
+      const along = toTarget.x * x + toTarget.y * y + toTarget.z * z;
+      this.targetGoal.set(
+        this.targetGoal.x - x * along,
+        this.targetGoal.y - y * along,
+        this.targetGoal.z - z * along,
+      );
+    }
+
+    // Spherical angles that place the eye on the normal, looking back down it.
+    const phi = Math.acos(Math.min(Math.max(y, -1), 1));
+    const theta = Math.atan2(x, z);
+
+    // Straight down or straight up is a pole: the azimuth is undefined there
+    // and snapping to it exactly makes the orbit spin unpredictably, so stop
+    // a hair short.
+    const epsilon = 0.02;
+    this.orbitTo(theta, Math.min(Math.max(phi, epsilon), Math.PI - epsilon));
+  }
+
+  /**
+   * How much world space one screen pixel covers at the orbit target.
+   *
+   * The conversion the whole app turns on: it is what keeps a dragged point
+   * under the finger, and what lets the brush control show a stroke at the
+   * thickness it will actually appear rather than as a number in metres.
+   */
+  worldPerPixel(viewportHeight: number): number {
+    const halfFov = (this.camera.fov * Math.PI) / 360;
+    return (2 * Math.tan(halfFov) * this.radiusGoal) / Math.max(viewportHeight, 1);
+  }
+
+  /**
    * Slides the target across the view plane. Deltas are in pixels; the
    * conversion keeps a dragged point under the finger regardless of distance.
    */
   pan(deltaX: number, deltaY: number, viewportHeight: number): void {
-    const halfFov = (this.camera.fov * Math.PI) / 360;
-    const worldPerPixel = (2 * Math.tan(halfFov) * this.radiusGoal) / viewportHeight;
+    const worldPerPixel = this.worldPerPixel(viewportHeight);
 
     const right = new THREE.Vector3();
     const up = new THREE.Vector3();

@@ -30,6 +30,18 @@ export const DEFAULT_PLANE_STATE: PlaneState = {
   anchorNormal: null,
 };
 
+/**
+ * The fixed planes' normals, for pointing the camera at one.
+ *
+ * `camera` and `surface` are absent deliberately: the first already faces you
+ * by definition, and the second has no normal until something has been tapped.
+ */
+export const PLANE_NORMALS: Partial<Record<PlaneMode, { x: number; y: number; z: number }>> = {
+  ground: { x: 0, y: 1, z: 0 },
+  front: { x: 0, y: 0, z: 1 },
+  side: { x: 1, y: 0, z: 0 },
+};
+
 export function resolvePlane(state: PlaneState, camera: OrbitCamera): Plane {
   const target = camera.lookTarget;
 

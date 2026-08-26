@@ -165,6 +165,10 @@ export class ToolController implements GestureHandlers {
     }
   };
 
+  onTouchOrbitedWithoutPen = (): void => {
+    useStore.getState().noticeTouchWithoutPen();
+  };
+
   onStrokeCancel = (): void => {
     this.draw.cancel();
     this.shape.cancel();

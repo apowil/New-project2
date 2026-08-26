@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import { formatLength } from '@wisp/core';
+import {
+  MAX_STROKE_WIDTH,
+  MIN_STROKE_WIDTH,
+  formatLength,
+  sliderFromWidth,
+  widthFromSlider,
+} from '@wisp/core';
 
-import { useStore } from '../state/store.js';
+import { getViewActions, useStore } from '../state/store.js';
 import { BRUSHES, matchBrush } from '../tools/brushes.js';
 import { ColorPicker } from './ColorPicker.js';
+import { LengthField } from './LengthField.js';
 import { Popover } from './Popover.js';
 
 /**
@@ -29,13 +36,13 @@ export function StyleBar() {
   const recentColors = useStore((state) => state.recentColors);
   const unit = useStore((state) => state.unit);
 
-  const [openPanel, setOpenPanel] = useState<'color' | 'brush' | null>(null);
+  const [openPanel, setOpenPanel] = useState<'color' | 'brush' | 'size' | null>(null);
   const activeBrush = matchBrush(style);
   const brushName = activeBrush
     ? (BRUSHES.find((brush) => brush.id === activeBrush)?.name ?? 'Custom')
     : 'Custom';
 
-  const toggle = (panel: 'color' | 'brush') =>
+  const toggle = (panel: 'color' | 'brush' | 'size') =>
     setOpenPanel((current) => (current === panel ? null : panel));
 
   return (
@@ -130,44 +137,153 @@ export function StyleBar() {
         </Popover>
       </div>
 
-      <Slider
-        label="Size"
-        value={style.width}
-        min={0.008}
-        max={0.4}
-        step={0.002}
-        format={(v) => formatLength(v, unit)}
-        onChange={(width) => setStyle({ width })}
-      />
+      <div className="relative z-40">
+        <button
+          type="button"
+          onClick={() => toggle('size')}
+          aria-label="Stroke size"
+          title="Stroke size"
+          className="flex w-32 flex-col items-start gap-1.5"
+        >
+          <span className="section-label flex w-full justify-between">
+            <span>Size</span>
+            <span className="tabular-nums text-secondary">{formatLength(style.width, unit)}</span>
+          </span>
+          <StrokePreview width={style.width} color={style.color} />
+        </button>
+
+        <Popover
+          open={openPanel === 'size'}
+          onClose={() => setOpenPanel(null)}
+          align="right"
+          label="Stroke size"
+        >
+          <SizePanel />
+        </Popover>
+      </div>
     </div>
   );
 }
 
-interface SliderProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  format: (value: number) => string;
-  onChange: (value: number) => void;
+/**
+ * The brush drawn at the thickness it will actually appear.
+ *
+ * A width in metres is the honest way to store a stroke and a useless way to
+ * choose one: the same 6 mm is a hairline across a room and a broad band up
+ * close. This shows the real on-screen thickness at the current zoom, and says
+ * so plainly when that falls below a single pixel — which is the answer to
+ * "why can I not see what I just drew".
+ */
+function StrokePreview({ width, color }: { width: number; color: string }) {
+  const pixels = useScreenPixels(width);
+  const drawn = Math.min(Math.max(pixels, 1), 26);
+
+  return (
+    <span className="flex h-7 w-full items-center gap-2 rounded-md bg-sunken px-2">
+      <span
+        className="block flex-1 rounded-full"
+        style={{ height: `${drawn}px`, background: color, opacity: pixels < 1 ? 0.55 : 1 }}
+      />
+      {pixels < 1 && (
+        <span className="shrink-0 text-[10px] leading-none text-muted">thin</span>
+      )}
+    </span>
+  );
 }
 
-function Slider({ label, value, min, max, step, format, onChange }: SliderProps) {
+/** How many screen pixels wide a stroke of this world width is right now. */
+function useScreenPixels(width: number): number {
+  const [pixels, setPixels] = useState(0);
+
+  // Re-measured on a timer rather than on camera events: the camera eases to
+  // its goal over several frames, and a subscription would either fire far too
+  // often or land before the ease finishes.
+  useEffect(() => {
+    const measure = () => {
+      const perPixel = getViewActions()?.worldPerPixel();
+      if (perPixel && perPixel > 0) setPixels(width / perPixel);
+    };
+    measure();
+    const id = setInterval(measure, 400);
+    return () => clearInterval(id);
+  }, [width]);
+
+  return pixels;
+}
+
+const TIPS: Array<{ mm: number; name: string }> = [
+  { mm: 0.2, name: 'Technical pen' },
+  { mm: 0.5, name: 'Fineliner' },
+  { mm: 1, name: 'Pen' },
+  { mm: 3, name: 'Marker' },
+  { mm: 10, name: 'Broad' },
+  { mm: 60, name: 'Block' },
+];
+
+/**
+ * Choosing a size across four orders of magnitude.
+ *
+ * Three ways in, because they suit different intents: named tips for "give me
+ * something like a fineliner", a typed field for a size that has to be exact,
+ * and a slider for hunting by eye.
+ */
+function SizePanel() {
+  const style = useStore((state) => state.style);
+  const setStyle = useStore((state) => state.setStyle);
+  const unit = useStore((state) => state.unit);
+
   return (
-    <label className="flex w-32 flex-col gap-1.5">
-      <span className="section-label flex justify-between">
-        <span>{label}</span>
-        <span className="tabular-nums text-secondary">{format(value)}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+    <div className="flex w-60 flex-col gap-3 p-3">
+      <span className="section-label">Stroke size</span>
+
+      <div className="grid grid-cols-3 gap-1">
+        {TIPS.map(({ mm, name }) => {
+          const width = mm / 1000;
+          return (
+            <button
+              key={mm}
+              type="button"
+              className="chip flex-col items-start py-1"
+              data-active={Math.abs(style.width - width) < width * 0.02}
+              onClick={() => setStyle({ width })}
+              title={`${name} — ${mm} mm`}
+            >
+              <span className="tabular-nums">{mm} mm</span>
+              <span className="block text-[10px] leading-tight text-muted">{name}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <LengthField
+        label="Exact"
+        value={style.width}
+        unit={unit}
+        min={MIN_STROKE_WIDTH}
+        max={MAX_STROKE_WIDTH}
+        onCommit={(width) => setStyle({ width })}
       />
-    </label>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="section-label flex justify-between">
+          <span>Slide</span>
+          <span className="tabular-nums text-secondary">{formatLength(style.width, unit)}</span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.001}
+          value={sliderFromWidth(style.width)}
+          aria-label="Stroke size"
+          onChange={(event) => setStyle({ width: widthFromSlider(Number(event.target.value)) })}
+        />
+      </label>
+
+      <p className="text-[11px] leading-snug text-muted">
+        {formatLength(MIN_STROKE_WIDTH, unit)} to {formatLength(MAX_STROKE_WIDTH, unit)}. The
+        slider moves by ratio, so fine sizes stay as controllable as broad ones.
+      </p>
+    </div>
   );
 }

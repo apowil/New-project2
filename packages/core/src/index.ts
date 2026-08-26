@@ -38,6 +38,7 @@ export { buildDimension, type DimensionParts } from './shapes/dimension.js';
 export { ADVANCE, LINE_HEIGHT, glyphFor, hasGlyph, type Glyph } from './shapes/font.js';
 
 export * from './document/types.js';
+export * from './document/scale.js';
 export * from './document/document.js';
 export { createId } from './document/ids.js';
 export { cloneNode, cloneNodes } from './document/clone.js';

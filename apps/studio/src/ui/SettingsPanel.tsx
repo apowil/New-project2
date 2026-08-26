@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { UNITS } from '@wisp/core';
+import { SCENE_SCALES, UNITS, type SceneScale } from '@wisp/core';
 
 import { useStore } from '../state/store.js';
 import { type ThemePreference } from '../state/theme.js';
@@ -20,6 +20,8 @@ export function SettingsPanel() {
   const setThemePreference = useStore((state) => state.setThemePreference);
   const touchIntent = useStore((state) => state.touchIntent);
   const setTouchIntent = useStore((state) => state.setTouchIntent);
+  const sceneScale = useStore((state) => state.sceneScale);
+  const setSceneScale = useStore((state) => state.setSceneScale);
   const showPlaneIndicator = useStore((state) => state.showPlaneIndicator);
   const setShowPlaneIndicator = useStore((state) => state.setShowPlaneIndicator);
   const unit = useStore((state) => state.unit);
@@ -99,6 +101,28 @@ export function SettingsPanel() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+              <span className="section-label">Working scale</span>
+              <div className="grid grid-cols-3 gap-1">
+                {(Object.keys(SCENE_SCALES) as SceneScale[]).map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="chip flex-col items-start py-1"
+                    data-active={sceneScale === id}
+                    onClick={() => setSceneScale(id)}
+                    title={SCENE_SCALES[id].description}
+                  >
+                    <span>{SCENE_SCALES[id].label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] leading-snug text-muted">
+                {SCENE_SCALES[sceneScale].description} Sets where the camera starts, how
+                large the grid is, and how far the sketch plane slides.
+              </p>
             </div>
 
             <div className="flex flex-col gap-1.5 border-t border-line pt-3">

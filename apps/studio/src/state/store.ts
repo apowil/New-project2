@@ -32,6 +32,8 @@ import {
   serializeDocument,
   deserializeDocument,
   NO_MIRROR,
+  DEFAULT_SCENE_SCALE,
+  sceneScaleSpec,
   type Affine,
   type Command,
   type NodeFlags,
@@ -42,6 +44,7 @@ import {
   type SketchDocument,
   type ShapeKind,
   type StrokeStyle,
+  type SceneScale,
   type Unit,
   type Vec3,
   withDimension,
@@ -73,6 +76,7 @@ import {
   type ThemePreference,
 } from './theme.js';
 import { readUnit, writeUnit } from './unitPreference.js';
+import { readFingerChoiceMade, rememberFingerChoice } from './touchPreference.js';
 
 export type ToolId = 'draw' | 'erase' | 'plane' | 'select' | 'shape' | 'text' | 'dimension';
 
@@ -152,6 +156,12 @@ export interface ViewActions {
   renderImage: (format: 'png' | 'jpg', scale: number) => string;
   renderSvg: () => Promise<string>;
   setUnit: (unit: Unit) => void;
+  /** World metres per screen pixel, so the UI can show a true-size brush. */
+  worldPerPixel: () => number;
+  setScale: (scale: SceneScale) => void;
+  frameForScale: (scale: SceneScale) => void;
+  /** Turns the camera to look squarely at a plane, so drawing is undistorted. */
+  facePlane: (normal: Vec3, pointOnPlane?: Vec3) => void;
 }
 
 let viewActions: ViewActions | null = null;
@@ -198,6 +208,8 @@ interface AppState {
   resolvedTheme: ResolvedTheme;
   /** Display unit for every measurement. Presentation only — never geometry. */
   unit: Unit;
+  /** The size of thing being drawn: sets camera, grid and default stroke. */
+  sceneScale: SceneScale;
 
   shapeKind: ShapeKind;
   polygonSides: number;
@@ -211,6 +223,14 @@ interface AppState {
   reference: ReferenceImage | null;
   /** Set while the next tap should sample a colour rather than select. */
   eyedropper: boolean;
+  /**
+   * Set once when a finger moved the camera on a device with no stylus.
+   *
+   * Without this the app is simply broken for anyone without a pen: every
+   * attempt to draw rotates the view, and the setting that fixes it is behind
+   * a gear icon nobody has a reason to open.
+   */
+  offerFingerDrawing: boolean;
   /**
    * A label while a heavy operation is running, or null.
    *
@@ -246,6 +266,8 @@ interface AppState {
   setThemePreference: (preference: ThemePreference) => void;
   syncResolvedTheme: () => void;
   setUnit: (unit: Unit) => void;
+  setSceneScale: (scale: SceneScale) => void;
+  applyDocumentScale: () => void;
   exportImage: (format: ImageFormat, scale?: number) => Promise<void>;
 
   setShapeKind: (kind: ShapeKind) => void;
@@ -292,6 +314,8 @@ interface AppState {
 
   pickColorAt: (id: string) => void;
   setEyedropper: (active: boolean) => void;
+  noticeTouchWithoutPen: () => void;
+  dismissFingerOffer: (enableDrawing: boolean) => void;
 
   mergeLayerDown: (layerId: string) => void;
   duplicateLayer: (layerId: string) => void;
@@ -355,6 +379,7 @@ export const useStore = create<AppState>((set, get) => ({
   themePreference: readThemePreference(),
   resolvedTheme: resolveTheme(readThemePreference()),
   unit: readUnit(),
+  sceneScale: DEFAULT_SCENE_SCALE,
   shapeKind: 'rectangle',
   polygonSides: 6,
   shapeReadout: null,
@@ -363,6 +388,7 @@ export const useStore = create<AppState>((set, get) => ({
   recentColors: [],
   reference: null,
   eyedropper: false,
+  offerFingerDrawing: false,
   busy: null,
   librarySearch: '',
   librarySort: 'recent',
@@ -455,6 +481,39 @@ export const useStore = create<AppState>((set, get) => ({
 
     get().run(new ReplaceNodesCommand([nodeId], [rebuilt], `Set ${label.toLowerCase()}`));
     set({ selection: [rebuilt.id] });
+  },
+
+  /**
+   * Switches the working scale.
+   *
+   * Moves the camera and re-sizes the grid, and offers the scale's default
+   * stroke — but only when the current one is plainly wrong for it, so a width
+   * chosen deliberately is never overwritten.
+   */
+  /** Re-reads the scale from the open document and applies it to the view. */
+  applyDocumentScale: () => {
+    const scale = session.document.scale ?? DEFAULT_SCENE_SCALE;
+    set({ sceneScale: scale });
+    getViewActions()?.setScale(scale);
+  },
+
+  setSceneScale: (scale) => {
+    const spec = sceneScaleSpec(scale);
+    session.document.scale = scale;
+
+    const current = get().style.width;
+    const wildlyOff = current > spec.defaultWidth * 20 || current < spec.defaultWidth / 20;
+
+    set((state) => ({
+      sceneScale: scale,
+      style: wildlyOff ? { ...state.style, width: spec.defaultWidth } : state.style,
+      plane: { ...state.plane, offset: 0 },
+    }));
+
+    const actions = getViewActions();
+    actions?.setScale(scale);
+    actions?.frameForScale(scale);
+    get().syncFromSession();
   },
 
   setUnit: (unit) => {
@@ -597,6 +656,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     set((state) => ({ documentEpoch: state.documentEpoch + 1 }));
+    get().applyDocumentScale();
     get().syncFromSession();
     autoSaver.markClean(session.document.revision);
     await get().refreshProjects();
@@ -1087,6 +1147,22 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setEyedropper: (eyedropper) => set({ eyedropper }),
+
+  /** Raised by the gesture layer; only ever offered once per session. */
+  noticeTouchWithoutPen: () => {
+    const state = get();
+    if (state.offerFingerDrawing || state.touchIntent === 'draw') return;
+    if (readFingerChoiceMade()) return;
+    set({ offerFingerDrawing: true });
+  },
+
+  dismissFingerOffer: (enableDrawing) => {
+    rememberFingerChoice();
+    set({ offerFingerDrawing: false });
+    if (enableDrawing) {
+      set({ touchIntent: 'draw', statusMessage: 'Your finger draws now. Two fingers move the view.' });
+    }
+  },
 
   /** Takes the colour of an existing node and makes it the current colour. */
   pickColorAt: (id) => {

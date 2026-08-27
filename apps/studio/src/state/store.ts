@@ -45,6 +45,7 @@ import {
   type ShapeKind,
   type StrokeStyle,
   type SceneScale,
+  type LiquifyMode,
   type Unit,
   type Vec3,
   withDimension,
@@ -94,7 +95,42 @@ import {
 import { readUnit, writeUnit } from './unitPreference.js';
 import { readFingerChoiceMade, rememberFingerChoice } from './touchPreference.js';
 
-export type ToolId = 'draw' | 'erase' | 'plane' | 'select' | 'shape' | 'text' | 'dimension';
+export type ToolId =
+  | 'draw'
+  | 'erase'
+  | 'plane'
+  | 'select'
+  | 'shape'
+  | 'text'
+  | 'dimension'
+  | 'liquify';
+
+/**
+ * The liquify brush.
+ *
+ * Radius is in metres, like every other measurement in the app, rather than in
+ * pixels — a brush that stayed the same size on screen would cover a different
+ * amount of the sketch at every zoom level, and the amount of the *sketch* it
+ * covers is the thing being decided.
+ */
+export interface LiquifySettings {
+  mode: LiquifyMode;
+  radius: number;
+  /** 0..1. How hard the brush works, not how far it reaches. */
+  strength: number;
+}
+
+/** Sensible brush size for the size of thing being drawn. */
+export const defaultLiquifyRadius = (scale: SceneScale): number =>
+  sceneScaleSpec(scale).planeRange * 0.25;
+
+/** How far the brush radius slider may travel, for a given working scale. */
+export const liquifyRadiusRange = (
+  scale: SceneScale,
+): { min: number; max: number } => {
+  const range = sceneScaleSpec(scale).planeRange;
+  return { min: range * 0.02, max: range * 1.5 };
+};
 
 /**
  * A tracing image floating over the canvas.
@@ -208,6 +244,7 @@ interface AppState {
   showPlaneIndicator: boolean;
   /** Reflect each new stroke through these world-origin planes. */
   mirror: MirrorAxes;
+  liquify: LiquifySettings;
 
   /** Mirrors `session.document.revision` so React knows when to re-read. */
   revision: number;
@@ -294,6 +331,9 @@ interface AppState {
   setStyle: (patch: Partial<StrokeStyle>) => void;
   setPlaneMode: (mode: PlaneMode) => void;
   setPlaneOffset: (offset: number) => void;
+  setLiquify: (patch: Partial<LiquifySettings>) => void;
+  /** Grows or shrinks the brush by a ratio, for the `[` and `]` keys. */
+  scaleLiquifyRadius: (factor: number) => void;
   setPlaneAnchor: (anchor: PlaneState['anchor'], normal: PlaneState['anchorNormal']) => void;
   setTouchIntent: (intent: TouchIntent) => void;
   setShowPlaneIndicator: (show: boolean) => void;
@@ -401,6 +441,7 @@ export const useStore = create<AppState>((set, get) => ({
   touchIntent: 'camera',
   showPlaneIndicator: true,
   mirror: { ...NO_MIRROR },
+  liquify: { mode: 'push', radius: defaultLiquifyRadius(DEFAULT_SCENE_SCALE), strength: 0.7 },
 
   revision: session.document.revision,
   documentEpoch: 0,
@@ -500,6 +541,22 @@ export const useStore = create<AppState>((set, get) => ({
       plane: { ...state.plane, mode: 'surface', anchor, anchorNormal, offset: 0 },
     })),
 
+  setLiquify: (patch) =>
+    set((state) => {
+      const { min, max } = liquifyRadiusRange(state.sceneScale);
+      const next = { ...state.liquify, ...patch };
+      return {
+        liquify: {
+          ...next,
+          radius: Math.min(Math.max(next.radius, min), max),
+          strength: Math.min(Math.max(next.strength, 0.02), 1),
+        },
+      };
+    }),
+
+  scaleLiquifyRadius: (factor) =>
+    get().setLiquify({ radius: get().liquify.radius * factor }),
+
   setTouchIntent: (touchIntent) => set({ touchIntent }),
   setShowPlaneIndicator: (showPlaneIndicator) => set({ showPlaneIndicator }),
   setStatusMessage: (statusMessage) => set({ statusMessage }),
@@ -540,7 +597,10 @@ export const useStore = create<AppState>((set, get) => ({
   /** Re-reads the scale from the open document and applies it to the view. */
   applyDocumentScale: () => {
     const scale = session.document.scale ?? DEFAULT_SCENE_SCALE;
-    set({ sceneScale: scale });
+    set((state) => ({
+      sceneScale: scale,
+      liquify: { ...state.liquify, radius: defaultLiquifyRadius(scale) },
+    }));
     getViewActions()?.setScale(scale);
   },
 
@@ -555,6 +615,9 @@ export const useStore = create<AppState>((set, get) => ({
       sceneScale: scale,
       style: wildlyOff ? { ...state.style, width: spec.defaultWidth } : state.style,
       plane: { ...state.plane, offset: 0 },
+      // A brush sized for a wristwatch reaches nothing on a building, so it
+      // moves with the scale rather than being left behind as a stale number.
+      liquify: { ...state.liquify, radius: defaultLiquifyRadius(scale) },
     }));
 
     const actions = getViewActions();

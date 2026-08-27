@@ -14,6 +14,7 @@ import { type GestureHandlers, type StrokeInput } from '../viewport/gestures.js'
 import { type Viewport } from '../viewport/viewport.js';
 import { session, useStore } from '../state/store.js';
 import { DrawTool } from './drawTool.js';
+import { LiquifyTool } from './liquifyTool.js';
 import { DimensionTool } from './dimensionTool.js';
 import { ShapeTool } from './shapeTool.js';
 import { TextTool } from './textTool.js';
@@ -28,12 +29,14 @@ export class ToolController implements GestureHandlers {
   readonly shape: ShapeTool;
   readonly text: TextTool;
   readonly dimension: DimensionTool;
+  readonly liquify: LiquifyTool;
 
   constructor(private readonly viewport: Viewport) {
     this.draw = new DrawTool(viewport);
     this.shape = new ShapeTool(viewport);
     this.text = new TextTool(viewport);
     this.dimension = new DimensionTool(viewport);
+    this.liquify = new LiquifyTool(viewport);
   }
 
   private marqueeStart: { x: number; y: number; additive: boolean } | null = null;
@@ -67,6 +70,9 @@ export class ToolController implements GestureHandlers {
         break;
       case 'shape':
         this.shape.begin(input);
+        break;
+      case 'liquify':
+        this.liquify.begin(input);
         break;
       case 'dimension':
         // Taps, not a drag: a dimension is three separate decisions.
@@ -106,6 +112,8 @@ export class ToolController implements GestureHandlers {
 
     if (tool === 'draw') {
       this.draw.extend(inputs);
+    } else if (tool === 'liquify') {
+      this.liquify.extend(inputs);
     } else if (tool === 'shape') {
       this.shape.extend(inputs);
     } else if (tool === 'erase') {
@@ -135,6 +143,11 @@ export class ToolController implements GestureHandlers {
 
     if (store.tool === 'shape') {
       this.shape.end(input);
+      return;
+    }
+
+    if (store.tool === 'liquify') {
+      this.liquify.end();
       return;
     }
 
@@ -173,6 +186,7 @@ export class ToolController implements GestureHandlers {
     this.draw.cancel();
     this.shape.cancel();
     this.dimension.cancel();
+    this.liquify.cancel();
     this.marqueeStart = null;
     if (this.moveState) this.endMove();
     useStore.getState().setMarquee(null);
@@ -270,6 +284,8 @@ export class ToolController implements GestureHandlers {
     const hovering = useStore.getState().tool;
     if (input && hovering === 'shape') this.shape.hover(input);
     if (input && hovering === 'dimension') this.dimension.hover(input);
+    // The brush ring follows the pen, and has to let go when it leaves.
+    if (hovering === 'liquify') this.liquify.hover(input);
   };
 
   onCameraChange = (): void => {
@@ -293,6 +309,9 @@ export class ToolController implements GestureHandlers {
   /** Called every frame before rendering. */
   tick = (): void => {
     this.draw.tick();
+    // Two of the liquify modes work for as long as the brush is held, so they
+    // are driven by the frame rather than by pointer events.
+    this.liquify.tick();
   };
 
   /** Places text at the point the text tool marked. */

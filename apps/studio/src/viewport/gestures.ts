@@ -76,6 +76,19 @@ interface TouchPoint {
 /** How long after the pen leaves that touch stays ignored, in ms. */
 const PALM_GUARD_MS = 600;
 
+/**
+ * Does this pointer report a position before it commits to anything?
+ *
+ * The S Pen does — it is tracked while still above the glass, which is what
+ * drives the aiming previews. So does a mouse, whenever no button is held. A
+ * finger does not: there is no such thing as a hovering touch, and treating
+ * one as a hover would put an aiming preview under a gesture that is actually
+ * orbiting the camera.
+ */
+const hovers = (event: PointerEvent): boolean =>
+  event.pointerType === 'pen' ||
+  (event.pointerType === 'mouse' && event.buttons === 0);
+
 /** Hold this long without sliding to pin the orbit point. */
 const LONG_PRESS_MS = 450;
 /** Movement beyond this many pixels means it was a drag, not a press. */
@@ -315,9 +328,7 @@ export class InputRouter {
       return;
     }
 
-    if (event.pointerType === 'pen' && this.strokePointerId === null) {
-      // Hover: the S Pen reports position before it touches the screen, which
-      // is what drives the aiming preview.
+    if (hovers(event) && this.strokePointerId === null) {
       this.handlers.onHover(this.toInput(event));
     }
   };
@@ -448,7 +459,7 @@ export class InputRouter {
   };
 
   private onPointerLeave = (event: PointerEvent): void => {
-    if (event.pointerType === 'pen' && this.strokePointerId === null) {
+    if (hovers(event) && this.strokePointerId === null) {
       this.handlers.onHover(null);
     }
   };

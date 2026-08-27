@@ -8,6 +8,7 @@ import { ToolController } from './tools/toolController.js';
 import { ActionBar } from './ui/ActionBar.js';
 import { DocumentBar } from './ui/DocumentBar.js';
 import { LayersPanel } from './ui/LayersPanel.js';
+import { LiquifyPanel } from './ui/LiquifyPanel.js';
 import { PlanePanel } from './ui/PlanePanel.js';
 import { ProjectsPanel } from './ui/ProjectsPanel.js';
 import { ReferenceOverlay } from './ui/ReferenceOverlay.js';
@@ -74,8 +75,17 @@ export function App() {
       const state = useStore.getState();
       viewport.planeIndicator.update(resolvePlane(state.plane, viewport.camera));
       viewport.planeIndicator.setVisible(
-        state.showPlaneIndicator && state.tool !== 'erase' && !controller.draw.isDrawing,
+        state.showPlaneIndicator &&
+          state.tool !== 'erase' &&
+          state.tool !== 'liquify' &&
+          !controller.draw.isDrawing,
       );
+
+      // The brush ring faces the camera, so it too has to be re-aimed every
+      // frame rather than only when the brush moves.
+      const brush = state.tool === 'liquify' ? controller.liquify.currentBrush() : null;
+      if (brush) viewport.brushIndicator.update(brush.centre, brush.radius, viewport.camera.camera);
+      else viewport.brushIndicator.setVisible(false);
     };
 
     setThumbnailProvider(() => viewport.thumbnail());
@@ -309,14 +319,22 @@ export function App() {
         case 'p':
           store.setTool('plane');
           break;
+        case 'l':
+          store.setTool('liquify');
+          break;
         case 'f':
           frameAll();
           break;
+        // The bracket keys always mean "the thing this tool draws with, bigger
+        // or smaller" — which is the brush radius while liquify is up, and the
+        // stroke width otherwise.
         case '[':
-          store.setStyle({ width: Math.max(0.008, store.style.width * 0.85) });
+          if (store.tool === 'liquify') store.scaleLiquifyRadius(0.85);
+          else store.setStyle({ width: Math.max(0.008, store.style.width * 0.85) });
           break;
         case ']':
-          store.setStyle({ width: Math.min(0.4, store.style.width * 1.18) });
+          if (store.tool === 'liquify') store.scaleLiquifyRadius(1.18);
+          else store.setStyle({ width: Math.min(0.4, store.style.width * 1.18) });
           break;
         default:
           break;
@@ -363,6 +381,12 @@ export function App() {
               <ShapePanel onFinish={(closed) => controllerRef.current?.finishShape(closed)} />
             )}
             <PlanePanel />
+          </div>
+        )}
+
+        {tool === 'liquify' && (
+          <div className="absolute bottom-4 left-4">
+            <LiquifyPanel />
           </div>
         )}
 

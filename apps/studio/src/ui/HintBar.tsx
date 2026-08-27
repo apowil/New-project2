@@ -18,6 +18,7 @@ const HINTS: Record<string, string> = {
   plane: 'Tap any surface to plant the sketch plane on it',
   shape: 'Drag to draw · shift for a square or 45° · alt from the centre',
   dimension: 'Tap two points to measure, then tap where the line should sit',
+  liquify: 'Drag over a stroke to reshape it · [ and ] size the brush · hold still to keep pulling or smoothing',
 };
 
 export function HintBar() {

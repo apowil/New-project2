@@ -24,6 +24,16 @@ export {
   mirrorVec3,
 } from './stroke/mirror.js';
 export {
+  type LiquifyBrush,
+  type LiquifyMode,
+  densify,
+  falloff,
+  liquifySamples,
+  medianSpacing,
+  polylineWithin,
+  relaxSpacing,
+} from './stroke/liquify.js';
+export {
   type StrokeGeometry,
   type StrokeGeometryOptions,
   DEFAULT_STROKE_OPTIONS,

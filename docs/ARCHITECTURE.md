@@ -24,7 +24,7 @@ one core, written once in TypeScript, delivered three ways:
         ┌──────────────────────┼──────────────────────┐
         │                      │                      │
    PWA / Android          Windows desktop        Tablet ⇄ PC
-   WebView shell          (Tauri, stage 5)       compute link
+   WebView shell          (Electron)             compute link
 ```
 
 ## Why the core has zero dependencies
@@ -60,6 +60,24 @@ So the document and its history live in a plain object (`session` in
 `state/store.ts`), the viewport reads it directly, and React is used only for
 the panels — which re-render off a small mirrored slice of state and a
 `revision` counter.
+
+## Editing a stroke means editing its centreline
+
+A stroke is stored as the samples along its middle, not as the triangles it is
+swept into. Everything that changes a stroke after the fact goes through those
+samples and lets the sweep rebuild: the liquify brush pushes them around, a
+restyle re-sweeps them at a new width, a transform maps them through an affine.
+
+Warping the mesh instead would be easier and wrong. It smears the surface,
+breaks the parallel-transport frames the next section is about, and leaves
+geometry that can never be re-swept at another width — which is precisely the
+state a boolean result is in, and the reason the file format has to carry
+baked meshes as a separate kind of node.
+
+The one thing this costs: a warp moves samples without adding or removing any,
+so pushing part of a stroke sideways stretches its rings and tightening one
+piles them up. Both are repaired when the gesture ends, locally, so samples the
+brush never reached stay exactly where they were.
 
 ## Two things that decide how a stroke looks
 
@@ -107,24 +125,34 @@ declared in `core/src/ops/types.ts`, rather than a direct function call.
 await session.ops.run('processStroke', { samples, spacing, ... });
 ```
 
-Today `session.ops` is an `InlineOpRunner` that calls the handler on the spot.
-Stage 5 adds a worker runner and a remote runner that speaks to the PC, and
-the call sites do not change. This is the whole reason the PC-offload feature
-is an addition rather than a rewrite.
+There are four runners now, and no call site knows which one it has: an inline
+one, a Web Worker one (the default in a browser), a pool of real processes
+inside the desktop app, and a link runner that speaks to a paired PC over a
+WebSocket. Adding the PC-offload feature changed no call sites at all, which
+was the entire point of the indirection.
+
+**What is not an operation, and why.** Reshaping a stroke — the liquify brush
+— warps centrelines inline on the main thread, deliberately. Sending a warp to
+another machine would put tens of milliseconds of Wi-Fi between the pen and the
+ink to save work measured in fractions of a millisecond, and the expensive part
+of a warp is re-sweeping the tubes, which has to happen on the machine that is
+about to draw them. Only jobs that cost seconds and are wanted once — booleans
+— are worth the trip.
 
 ## Layout
 
 ```
 packages/core/          no dependencies, unit-tested, portable
   math/                 vec3, sketch planes, ray/plane intersection
-  stroke/               1€ filter, simplify/resample, mesh sweeping
+  stroke/               1€ filter, simplify/resample, liquify, mesh sweeping
   document/             document, layers, nodes, ids
   history/              command stack and the concrete commands
   ops/                  operation contracts + the inline runner
 
 apps/studio/            the app
-  viewport/             Three.js scene, camera, gestures, plane indicator
-  tools/                draw tool, tool routing
+  viewport/             Three.js scene, camera, gestures, plane and brush aids
+  tools/                draw, shape, text, dimension, liquify, tool routing
+  ops/                  the worker, desktop-pool and PC-link runners
   state/                session (mutable) + zustand store (UI mirror)
   ui/                   React panels
 

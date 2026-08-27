@@ -1,4 +1,14 @@
-import { autoUpdater } from 'electron-updater';
+import updater from 'electron-updater';
+
+/**
+ * `electron-updater` is CommonJS, and it is deliberately left out of the
+ * bundle — it reads `app-update.yml` from the installed app's resources and
+ * expects to find itself in `node_modules`. The main process is ESM, though,
+ * so a named import of it is a static ESM import of a CommonJS module, which
+ * Node's loader cannot resolve: the main process threw on load and no window
+ * was ever created. The default import is the `module.exports` object.
+ */
+const { autoUpdater } = updater;
 
 /**
  * Keeping the desktop app current.

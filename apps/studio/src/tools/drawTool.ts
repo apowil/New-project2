@@ -9,6 +9,8 @@ import {
   mirrorCombinations,
   mirrorSamples,
   mirrorVec3,
+  PREVIEW_RING_BUDGET,
+  previewSamples,
   raycastPlane,
   type Plane,
   type StrokeGeometry,
@@ -38,6 +40,11 @@ export class DrawTool {
   private plane: Plane | null = null;
   private previewDirty = false;
   private active = false;
+  /**
+   * Bumped when a stroke starts. A commit finishing after the next stroke has
+   * already begun must not pull down the preview that belongs to it.
+   */
+  private generation = 0;
 
   constructor(private readonly viewport: Viewport) {}
 
@@ -63,6 +70,7 @@ export class DrawTool {
     if (!isLayerEditable(session.document, state.activeLayerId)) return;
 
     this.active = true;
+    this.generation += 1;
     this.samples = [];
     this.filter.reset();
     this.plane = resolvePlane(state.plane, this.viewport.camera);
@@ -127,12 +135,27 @@ export class DrawTool {
       sides: Math.max(4, Math.floor(style.sides / 2)),
     };
 
+    const mirrors = mirrorCombinations(useStore.getState().mirror);
+
+    // Thinned before sweeping, not after. Every ring of a stroke depends on
+    // its total length — the taper is a fraction of it, the U coordinate is a
+    // position along it — so a preview cannot be appended to and has to be
+    // rebuilt whole on every frame. Left uncapped, a frame costs more the
+    // longer the stroke gets, and drawing one costs its length squared.
+    //
+    // The budget is shared between the copies, so symmetry trades preview
+    // fidelity for keeping up rather than multiplying the work by eight.
+    const preview = previewSamples(
+      this.samples,
+      Math.floor(PREVIEW_RING_BUDGET / (mirrors.length + 1)),
+    );
+
     const geometries: StrokeGeometry[] = [];
-    const first = buildStrokeGeometry(this.samples, { ...options, initialNormal: normal });
+    const first = buildStrokeGeometry(preview, { ...options, initialNormal: normal });
     if (first) geometries.push(first);
 
-    for (const flip of mirrorCombinations(useStore.getState().mirror)) {
-      const geometry = buildStrokeGeometry(mirrorSamples(this.samples, flip), {
+    for (const flip of mirrors) {
+      const geometry = buildStrokeGeometry(mirrorSamples(preview, flip), {
         ...options,
         initialNormal: normal ? mirrorVec3(normal, flip) : undefined,
       });
@@ -149,10 +172,30 @@ export class DrawTool {
     const style = { ...this.style };
     const plane = this.plane;
     const raw = this.samples;
+    const token = this.generation;
     this.samples = [];
     this.plane = null;
-    this.viewport.setPreview(null, style);
 
+    // The preview stays up until the committed stroke has taken its place.
+    //
+    // Clearing it here — before the worker has smoothed the samples — leaves
+    // the ink somebody just drew missing from the screen for as long as that
+    // round trip takes: 200 to 250 ms, on every stroke rather than only the
+    // first. It reads as the stroke blinking out and coming back.
+    try {
+      await this.commit(raw, plane, style);
+    } finally {
+      // Not if another stroke has started in the meantime: that one owns the
+      // preview now, and this one has no business taking it down.
+      if (this.generation === token) this.viewport.setPreview(null, style);
+    }
+  }
+
+  private async commit(
+    raw: StrokeSample[],
+    plane: Plane | null,
+    style: StrokeStyle,
+  ): Promise<void> {
     if (!plane) return;
 
     const samples = raw.length >= 2 ? raw : dotStroke(raw, plane, style);
@@ -201,6 +244,11 @@ export class DrawTool {
         mirrors.length > 0 ? 'Draw mirrored stroke' : 'Draw stroke',
       ),
     );
+
+    // Put the real meshes in the scene now rather than waiting for React to
+    // notice the revision changed, so the preview comes down in the same frame
+    // the committed stroke goes up and there is no gap between them.
+    this.viewport.syncDocument(session.document);
   }
 
   cancel(): void {

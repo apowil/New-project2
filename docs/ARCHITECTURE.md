@@ -79,6 +79,28 @@ so pushing part of a stroke sideways stretches its rings and tightening one
 piles them up. Both are repaired when the gesture ends, locally, so samples the
 brush never reached stay exactly where they were.
 
+## The preview is not the stroke
+
+While a stroke is being drawn, what is on screen is a preview: swept with half
+the cross-section sides, and thinned to a fixed number of rings. It is rebuilt
+whole on every frame, because every ring depends on the stroke's total length —
+the taper is a fraction of it — so there is nothing to append to.
+
+That rebuild is why the thinning exists. Uncapped, a frame costs what the
+stroke has cost so far, and drawing one costs its length squared; capped, a
+frame costs the same however long the stroke gets. Samples arrive about a
+screen pixel apart, so the rings being dropped were never visible anyway.
+
+The full-resolution surface is built once, when the pen lifts, from the
+complete sample set. Nothing thinned is ever committed.
+
+The preview also has to outlive the pen. Smoothing the finished stroke is a
+round trip to a worker taking a couple of hundred milliseconds, so tearing the
+preview down when the pointer lifts leaves the ink missing from the screen
+until the committed stroke arrives. It stays up until the real mesh is in the
+scene, and a generation counter stops a commit that finishes late from pulling
+down a preview that now belongs to the next stroke.
+
 ## Two things that decide how a stroke looks
 
 **Parallel-transport frames.** Sweeping a cross-section along a curve needs a
@@ -144,7 +166,8 @@ about to draw them. Only jobs that cost seconds and are wanted once — booleans
 ```
 packages/core/          no dependencies, unit-tested, portable
   math/                 vec3, sketch planes, ray/plane intersection
-  stroke/               1€ filter, simplify/resample, liquify, mesh sweeping
+  stroke/               1€ filter, simplify/resample, liquify, preview
+                        thinning, mesh sweeping
   document/             document, layers, nodes, ids
   history/              command stack and the concrete commands
   ops/                  operation contracts + the inline runner

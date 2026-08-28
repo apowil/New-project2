@@ -303,10 +303,48 @@ expensive work happens on hardware that can do it quickly.
 - **Brush textures and patterns** beyond the swept-tube shapes now available
 - Onboarding for the gesture model
 - Stroke stabiliser strength control
-- Performance: instanced stroke rendering, LOD for dense sketches
+- Performance: instanced stroke rendering, LOD for dense sketches. Measured on
+  a software renderer: a stroke costs about 3,500 triangles, so 512 strokes is
+  1.8 million and takes 7.4 ms a frame to draw. It scales linearly and is not
+  urgent, but it is the next thing that will bite.
 - Bundle splitting so first paint does not wait on all of Three.js
 
 ---
+
+## On drawing staying responsive
+
+The preview of a stroke in progress is rebuilt from scratch on every frame,
+and it has to be: every ring's radius depends on the stroke's *total* length,
+because the taper is a fraction of it. Adding a sample at the tip changes the
+first ring. There is no correct way to append to the previous frame's mesh.
+
+So a frame costs what the stroke has cost so far, and drawing a whole stroke
+costs its length squared. Measured, in milliseconds of sweeping: a stroke
+growing to 200 samples spends 5, to 400 spends 21, to 800 spends 89, to 1600
+spends 378 — four times the work for twice the stroke. Driving the real app at
+the sample density a digitiser actually produces, one sweep went from 0.3 ms to
+1.8 ms and was still climbing at 1,548 samples; with eight symmetry copies that
+is 14 ms a frame on a desktop CPU, and several times that on a tablet, sitting
+directly between the pen moving and the ink appearing.
+
+The preview now sweeps at most a fixed number of rings, shared between the
+symmetry copies. Samples are collected about a screen pixel apart, so a long
+stroke was carrying far more rings than the screen could show; thinning them
+costs nothing visible and makes a frame cost the same whether the stroke is a
+centimetre or ten metres long. On the same measurement the sweep went flat at
+0.6 ms and the preview's triangle count stopped growing.
+
+The thinning is display-only. What lands in the document is the full stroke —
+there is an end-to-end test for exactly that, because a performance trick that
+quietly lowered the resolution of somebody's drawing would be a bad bargain.
+
+The same pass turned up a second fault, and a more visible one. Smoothing a
+finished stroke is a round trip to a worker, measured at 200–250 ms on every
+stroke, not just the first. The preview was being torn down at the *start* of
+that window and the committed stroke only appeared at the end — so the ink
+somebody had just drawn was missing from the screen in between. Watched frame
+by frame, the pixel count in the stroke's own area went to zero. The preview
+now stays up until the committed stroke has taken its place.
 
 ## Known gaps right now
 

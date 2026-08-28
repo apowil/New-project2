@@ -27,6 +27,14 @@ export const EraserIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+/** A line being pushed out of true by a round brush, which is the whole tool. */
+export const LiquifyIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className} aria-hidden="true">
+    <path d="M3 16c3 0 4-8 7-8s4 8 7 8" />
+    <circle cx="10" cy="10" r="4.5" strokeDasharray="2.4 2.2" />
+  </svg>
+);
+
 export const PlaneIcon = ({ className }: IconProps) => (
   <svg {...base} className={className} aria-hidden="true">
     <path d="M3 9l9-4 9 4-9 4-9-4z" />

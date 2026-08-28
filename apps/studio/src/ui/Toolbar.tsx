@@ -3,6 +3,7 @@ import {
   CursorIcon,
   DimensionIcon,
   EraserIcon,
+  LiquifyIcon,
   PenIcon,
   PlaneIcon,
   ShapesIcon,
@@ -15,6 +16,7 @@ const TOOLS: Array<{ id: ToolId; label: string; hint: string; Icon: typeof PenIc
   { id: 'shape', label: 'Shapes', hint: 'R', Icon: ShapesIcon },
   { id: 'text', label: 'Text', hint: 'T', Icon: TextIcon },
   { id: 'dimension', label: 'Dimension', hint: 'M', Icon: DimensionIcon },
+  { id: 'liquify', label: 'Reshape', hint: 'L', Icon: LiquifyIcon },
   { id: 'erase', label: 'Erase', hint: 'E', Icon: EraserIcon },
   { id: 'plane', label: 'Place sketch plane', hint: 'P', Icon: PlaneIcon },
 ];

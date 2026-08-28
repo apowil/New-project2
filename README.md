@@ -7,8 +7,9 @@ Think [feather.art](https://www.feather.art/), but for Android, and with an
 extra trick: pair the tablet with the Windows app and the heavy operations run
 on the PC while the pen stays immediate and local.
 
-**Sketching, shapes, editing and persistence are built.** See
-[docs/ROADMAP.md](docs/ROADMAP.md) for what is done and what is next.
+**Sketching, shapes, editing, reshaping, persistence and the desktop compute
+link are built.** See [docs/ROADMAP.md](docs/ROADMAP.md) for what is done and
+what is next.
 
 ## Try it
 
@@ -48,8 +49,8 @@ npm run typecheck
 Press and hold with a finger — or middle-click — to re-centre the orbit on
 whatever is under it.
 
-Keys: `D` draw · `S` select · `R` shapes · `T` text · `M` measure · `E` erase ·
-`P` place sketch plane · `F` frame
+Keys: `D` draw · `S` select · `R` shapes · `T` text · `M` measure · `L` reshape ·
+`E` erase · `P` place sketch plane · `F` frame
 everything · `[` `]` brush size · `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo ·
 `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut, paste · `Ctrl+D` duplicate ·
 `Ctrl+A` select the layer · `Del` delete · `Esc` deselect · `Ctrl+S` save ·
@@ -63,6 +64,15 @@ restyles it rather than only affecting the next stroke.
 
 Drawing a shape, hold **shift** for a square or a 45° line, and **alt** to
 grow it from its centre.
+
+With the **reshape** tool, drag across a stroke to change its shape after the
+fact. *Push* drags what the brush covers along with the pen; *pull* draws it
+in; *twist* pins itself where you pressed and turns as you drag sideways; and
+*smooth* relaxes a wobble out. Pull and smooth keep working for as long as you
+hold the brush still, so there is no need to scrub. `[` and `]` size the brush,
+and the ring in the scene shows how far it reaches — the inner circle is where
+it is working at half strength. Select something first to reshape only that;
+with nothing selected the brush takes whatever it covers.
 
 **Sketch planes** are the thing to understand. Strokes land on a plane in
 space. By default that plane faces you, so drawing feels like paper — then you
@@ -80,6 +90,8 @@ it, so you can draw directly onto existing geometry.
 - Select, move, copy, cut, paste and duplicate — including into another layer
 - Rotate, scale, mirror and place a selection by exact amounts; restyle it
 - Boolean operations: merge, subtract, intersect, and a non-cutting combine
+- Reshape after the fact: push, pull, twist and smooth a stroke's centreline
+  with a falloff brush, re-swept live
 - Groups — keep things together reversibly, without baking them
 - Layers: merge down, duplicate with contents, reorder, move a selection
 - An outliner: every object nameable, hideable and lockable on its own

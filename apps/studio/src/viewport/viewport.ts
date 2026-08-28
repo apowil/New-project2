@@ -20,6 +20,7 @@ import {
 import { SCENE_THEMES, type ResolvedTheme, type SceneTheme } from '../state/theme.js';
 import { OrbitCamera } from './camera.js';
 import { PlaneIndicator } from './sketchPlane.js';
+import { BrushIndicator } from './brushIndicator.js';
 import { applyStyle, makeStrokeMaterial, toBufferGeometry } from './strokeMesh.js';
 import { sweepPolylines } from './sweep.js';
 
@@ -58,6 +59,7 @@ export class Viewport {
   readonly camera: OrbitCamera;
   readonly scene = new THREE.Scene();
   readonly planeIndicator = new PlaneIndicator();
+  readonly brushIndicator = new BrushIndicator();
 
   private readonly renderer: THREE.WebGLRenderer;
   private readonly strokeGroup = new THREE.Group();
@@ -102,6 +104,7 @@ export class Viewport {
 
     this.scene.add(this.strokeGroup);
     this.scene.add(this.planeIndicator.object);
+    this.scene.add(this.brushIndicator.object);
 
     this.camera = new OrbitCamera(this.aspect);
     this.camera.setView(Math.PI * 0.25, Math.PI * 0.36, 6, new THREE.Vector3(0, 0.6, 0));
@@ -512,6 +515,12 @@ export class Viewport {
         existing.mesh.geometry.dispose();
         existing.mesh.geometry = toBufferGeometry(geometry);
       }
+      // A centreline with no length left has no surface to sweep — the liquify
+      // brush can pull a short stroke into a single point. Hiding the mesh is
+      // what makes that honest: keeping the last buildable version on screen
+      // would show a stroke that no longer exists, and undo would appear to do
+      // nothing. The node stays in the document, so undo brings it back.
+      existing.mesh.visible = geometry !== null;
       existing.samplesRef = node.samples;
     }
 
@@ -580,6 +589,25 @@ export class Viewport {
     this.previewMeshes.length = 0;
     this.previewMaterial?.dispose();
     this.previewMaterial = null;
+  }
+
+  /**
+   * Hides the on-screen drawing aids, returning a function that puts them back.
+   *
+   * Anything that renders the scene to be *kept* — an exported image, an SVG,
+   * a project thumbnail — wants the artwork on its own. The sketch plane grid
+   * and the liquify brush ring are instruments for drawing with, not part of
+   * what was drawn.
+   */
+  private hideAids(): () => void {
+    const plane = this.planeIndicator.object.visible;
+    const brush = this.brushIndicator.object.visible;
+    this.planeIndicator.setVisible(false);
+    this.brushIndicator.setVisible(false);
+    return () => {
+      this.planeIndicator.setVisible(plane);
+      this.brushIndicator.setVisible(brush);
+    };
   }
 
   /** Screen point (CSS pixels) to normalised device coordinates. */
@@ -718,8 +746,7 @@ export class Viewport {
     const height = this.canvas.clientHeight || 1;
     const pixelRatio = this.renderer.getPixelRatio();
 
-    const indicatorWasVisible = this.planeIndicator.object.visible;
-    this.planeIndicator.setVisible(false);
+    const restoreAids = this.hideAids();
 
     try {
       this.renderer.setPixelRatio(Math.min(scale, 4));
@@ -744,7 +771,7 @@ export class Viewport {
       this.renderer.setPixelRatio(pixelRatio);
       this.renderer.setSize(width, height, false);
       this.camera.setAspect(this.aspect);
-      this.planeIndicator.setVisible(indicatorWasVisible);
+      restoreAids();
       this.requestRender();
     }
   }
@@ -767,8 +794,7 @@ export class Viewport {
     renderer.setSize(width, height);
     renderer.setQuality('high');
 
-    const indicatorWasVisible = this.planeIndicator.object.visible;
-    this.planeIndicator.setVisible(false);
+    const restoreAids = this.hideAids();
 
     try {
       renderer.render(this.scene, this.camera.camera);
@@ -777,7 +803,7 @@ export class Viewport {
       element.setAttribute('viewBox', `0 0 ${width} ${height}`);
       return `<?xml version="1.0" encoding="UTF-8"?>\n${element.outerHTML}`;
     } finally {
-      this.planeIndicator.setVisible(indicatorWasVisible);
+      restoreAids();
     }
   }
 
@@ -796,11 +822,9 @@ export class Viewport {
     const { width, height } = this.canvas;
     if (width === 0 || height === 0) return null;
 
-    // The plane indicator is a drawing aid, not part of the artwork.
-    const indicatorWasVisible = this.planeIndicator.object.visible;
-    this.planeIndicator.setVisible(false);
+    const restoreAids = this.hideAids();
     this.renderer.render(this.scene, this.camera.camera);
-    this.planeIndicator.setVisible(indicatorWasVisible);
+    restoreAids();
     this.requestRender();
 
     const scale = Math.min(1, maxWidth / width);
@@ -832,6 +856,7 @@ export class Viewport {
     this.entries.clear();
 
     this.planeIndicator.dispose();
+    this.brushIndicator.dispose();
     this.scene.environment?.dispose();
     this.renderer.dispose();
   }

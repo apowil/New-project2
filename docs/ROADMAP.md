@@ -4,7 +4,8 @@ The build is staged so each stage ends with something you can actually pick up
 and use on the tablet, rather than a half-app that only makes sense when the
 last piece lands.
 
-Stages 1 and 3 are done. Everything else is planned, not built.
+Stages 1, 2, 3 and 5 are done, along with the interface work in between.
+Stages 4, 6 and 7 are planned, not built.
 
 ---
 
@@ -161,6 +162,96 @@ almost everything could be *made* and almost nothing could be *changed*.
   **library search and sort**, and a **lowercase alphabet** with real
   ascenders and descenders rather than small capitals.
 
+## Stage 2.5 — Liquify ✅
+
+The one thing the app could not do: change the shape of something already
+drawn. A falloff brush now pushes, pulls, twists and relaxes the *centrelines*
+of strokes, and the tubes are re-swept from them live.
+
+- **Four modes.** *Push* drags what it covers along with the pen. *Pull* draws
+  it in toward the brush. *Twist* pins itself where you pressed and turns what
+  is under it as you drag sideways. *Smooth* relaxes a wobble out. Push and
+  twist are spent by movement; pull and smooth are rates, and keep working for
+  as long as the brush is held — which is why the warp runs on the frame tick
+  rather than on pointer events.
+- **Centrelines, not triangles.** Warping the mesh would smear the surface and
+  leave a stroke that could never be re-swept at another width. Moving the
+  samples means the sweep rebuilds properly — caps, taper, parallel-transport
+  frames and all.
+- **A spherical brush, measured in metres.** A sketch is a 3D object, so a
+  brush that took "everything under the cursor" regardless of depth would grab
+  the far side of a form as readily as the near side. The ring in the scene
+  shows both the radius and, at half of it, where the falloff is half strength.
+- **Smoothstep falloff**, because a linear ramp leaves a visible crease at the
+  rim of the brush: the rate of displacement jumps from something to nothing
+  there, and warped and untouched geometry no longer meet flush.
+- **Spacing repaired afterwards.** Pushing part of a stroke sideways stretches
+  its rings until the sweep looks faceted; tightening one piles samples on top
+  of each other. Both are fixed when the pen lifts — locally, so every sample
+  the brush never reached stays exactly where it was. Doing it every frame
+  instead would shift the ground under the next frame's falloff and the stroke
+  would creep.
+- **Coarse centrelines are densified on contact.** A rectangle from the shape
+  tool is five points, so a brush parked in the middle of an edge had nothing
+  to grab and did nothing at all while looking like it should. Whether the
+  brush is over a stroke is now asked of the *line*, not of its samples, and
+  the first time the brush arrives the stroke gains enough points to be worth
+  moving.
+- One undo entry for the whole gesture, holding the centrelines from before —
+  a warp is not invertible the way an affine transform is, so there is no
+  inverse to store instead.
+- A selection narrows what the brush may touch; with nothing selected it takes
+  whatever it covers, because having to select first would be a step in the way
+  of every quick adjustment.
+
+### Why this one does not go through the compute link
+
+Stage 5 named liquify as work to dispatch to the PC. Having built both, that
+was the wrong call, and it is worth saying why rather than quietly leaving the
+seam unused.
+
+The falloff itself is a linear scan over samples — cheap even on a dense
+sketch, and guarded by a segment-distance test so strokes nowhere near the
+brush cost almost nothing. What is actually expensive is re-sweeping
+the warped tubes, every frame, and that has to happen on whatever machine is
+about to draw them. Sending a warp round trip over Wi-Fi would add tens of
+milliseconds between the pen and the ink for work measured in fractions of a
+millisecond, which is the one trade a sketching app cannot make.
+
+Booleans remain the right thing to offload: they are seconds of work, not
+microseconds, and their result is wanted once rather than sixty times a second.
+
+## Stage 5 — The compute link ✅
+
+The desktop app runs Wisp natively, serves it to tablets on the same network,
+and does their heavy work for them.
+
+- **Electron**, not Tauri as originally planned: the compute host wants real
+  Node processes to run `@wisp/core` in, and Electron already ships one.
+- **Serving and offloading are separate things**, and easy to conflate. A page
+  served from the desktop still runs entirely on the tablet's own processor.
+  Only sending a job across and getting a mesh back makes anything faster.
+- Pairing is a six-digit code, shown on the desktop as a QR so a tablet can
+  scan the address and the code together. Remembered afterwards, so a device
+  reconnects without asking again.
+- Operations travel over a WebSocket against an allowlist, and are run in a
+  pool of worker processes rather than on the host's UI thread.
+- **Only jobs worth the trip are sent.** A round trip over Wi-Fi costs tens of
+  milliseconds, so a stroke — a few kilobytes each way, microseconds of work —
+  is always done locally, and booleans are the one thing dispatched.
+- Falls back to a Web Worker in the page when nothing is paired, when the link
+  drops mid-session, or when a compute process dies.
+- The desktop app checks for updates and downloads them, then **stops and
+  waits**: installing means quitting, and an app that closes a window with an
+  hour of unsaved sketching in it to save somebody thirty seconds has done
+  something unforgivable.
+
+**Why it is built this way.** Rendering and pen input stay on the tablet.
+Rendering on the PC and streaming video would put 30–60 ms of Wi-Fi latency
+between the pen tip and the ink, which is the one thing a sketching app cannot
+afford. Offloading *operations* keeps drawing local and immediate while the
+expensive work happens on hardware that can do it quickly.
+
 ---
 
 ## Still to build
@@ -176,14 +267,6 @@ almost everything could be *made* and almost nothing could be *changed*.
 - Snapping to vertices, edges, midpoints, faces and the ground
 - Partial eraser — split a stroke instead of deleting the whole thing
 
-### Stage 2.5 — Liquify
-
-Feather's headline editing tool, and the biggest single gap. Select strokes
-and push, pull, twist and smooth their centrelines with a falloff brush,
-rebuilding the mesh live. Distinctive enough to be worth doing properly rather
-than late — it is the difference between "draw and delete" and actually
-sculpting a sketch.
-
 ### Stage 4 — Import and export
 
 - Export: glTF/GLB, OBJ, STL, PNG/JPEG snapshots
@@ -193,27 +276,11 @@ sculpting a sketch.
   on a plane to trace over
 - A Blender import path, matching Feather's add-on
 
-### Stage 5 — The compute link (the PC feature)
+### Stage 5 continued — the compute link
 
-The desktop app doubles as a compute host for the tablet.
-
-- Windows desktop app (Tauri) that runs Wisp natively **and** serves it over
-  the LAN; pair by QR code or six-digit code
-- Heavy operations — liquify falloff over dense strokes, booleans,
-  subdivision, remesh, export encoding — dispatched to the PC over a
-  WebSocket, mesh buffers streamed back
-- Automatic fallback to a Web Worker when no PC is paired, or when the link
-  drops mid-session
-- Discovery over mDNS, manual IP entry as the escape hatch
-
-**Why it is built this way.** Rendering and pen input stay on the tablet.
-Rendering on the PC and streaming video would put 30–60 ms of Wi-Fi latency
-between the pen tip and the ink, which is the one thing a sketching app cannot
-afford. Offloading *operations* keeps drawing local and immediate while the
-expensive work happens on hardware that can do it quickly.
-
-The seam already exists: heavy calls go through the `OpRunner` interface in
-`@wisp/core`, which today has one implementation that runs inline.
+- Discovery over mDNS, so a tablet finds the desktop without being shown an
+  address to type or a code to scan
+- More operations worth dispatching: subdivision, remesh, export encoding
 
 ### Stage 6 — Android packaging
 
@@ -236,17 +303,64 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
 - **Brush textures and patterns** beyond the swept-tube shapes now available
 - Onboarding for the gesture model
 - Stroke stabiliser strength control
-- Performance: instanced stroke rendering, LOD for dense sketches
+- Performance: instanced stroke rendering, LOD for dense sketches. Measured on
+  a software renderer: a stroke costs about 3,500 triangles, so 512 strokes is
+  1.8 million and takes 7.4 ms a frame to draw. It scales linearly and is not
+  urgent, but it is the next thing that will bite.
 - Bundle splitting so first paint does not wait on all of Three.js
 
 ---
 
+## On drawing staying responsive
+
+The preview of a stroke in progress is rebuilt from scratch on every frame,
+and it has to be: every ring's radius depends on the stroke's *total* length,
+because the taper is a fraction of it. Adding a sample at the tip changes the
+first ring. There is no correct way to append to the previous frame's mesh.
+
+So a frame costs what the stroke has cost so far, and drawing a whole stroke
+costs its length squared. Measured, in milliseconds of sweeping: a stroke
+growing to 200 samples spends 5, to 400 spends 21, to 800 spends 89, to 1600
+spends 378 — four times the work for twice the stroke. Driving the real app at
+the sample density a digitiser actually produces, one sweep went from 0.3 ms to
+1.8 ms and was still climbing at 1,548 samples; with eight symmetry copies that
+is 14 ms a frame on a desktop CPU, and several times that on a tablet, sitting
+directly between the pen moving and the ink appearing.
+
+The preview now sweeps at most a fixed number of rings, shared between the
+symmetry copies. Samples are collected about a screen pixel apart, so a long
+stroke was carrying far more rings than the screen could show; thinning them
+costs nothing visible and makes a frame cost the same whether the stroke is a
+centimetre or ten metres long. On the same measurement the sweep went flat at
+0.6 ms and the preview's triangle count stopped growing.
+
+The thinning is display-only. What lands in the document is the full stroke —
+there is an end-to-end test for exactly that, because a performance trick that
+quietly lowered the resolution of somebody's drawing would be a bad bargain.
+
+The same pass turned up a second fault, and a more visible one. Smoothing a
+finished stroke is a round trip to a worker, measured at 200–250 ms on every
+stroke, not just the first. The preview was being torn down at the *start* of
+that window and the committed stroke only appeared at the end — so the ink
+somebody had just drawn was missing from the screen in between. Watched frame
+by frame, the pixel count in the stroke's own area went to zero. The preview
+now stays up until the committed stroke has taken its place.
+
 ## Known gaps right now
 
-- A stroke's shape cannot be edited after it is drawn — it can be moved,
-  transformed, restyled, combined and deleted, but its centreline cannot be
-  pushed around (liquify, stage 2.5)
 - Transforms are exact steps from a menu; there is no drag handle in the scene
+- Reshaping drops a shape's editable dimensions, for the same reason scaling
+  does: a rectangle pushed out of true is no longer "80 by 50", and numbers
+  that lie are worse than no numbers
+- The reshape brush works on strokes only. A baked mesh — the result of a
+  boolean — has no centreline left to push around, so the brush passes
+  straight through it
+- *Pull* held over a short stroke will draw the whole thing into a point, the
+  way any pucker brush does. A stroke with no length has no surface, so it
+  disappears from view rather than showing a stale one; it is still in the
+  document and one undo brings it back
+- A reshaped stroke that a symmetry axis had mirrored does not carry the warp
+  across to its copies; symmetry applies as a stroke is drawn, not afterwards
 - Scaling a stroke drops its editable dimensions, because the stored numbers
   would no longer describe it. Rotation and movement keep them.
 - No 3D model export yet — PNG, JPEG and SVG work, but glTF, OBJ and STL do
@@ -257,9 +371,10 @@ The seam already exists: heavy calls go through the `OpRunner` interface in
   parameters would need a reflected plane to stay honest
 - The stroke font covers ASCII letters, digits and a little punctuation;
   accented characters fall back to the unaccented capital
-- Booleans run on the main thread; a very dense selection will pause the UI
-  for a moment. This is the first operation that should move to the compute
-  link in stage 5.
+- Reshaping re-sweeps every warped tube on the main thread, once per frame.
+  That is the right place for it — see stage 2.5 — but it does mean a brush
+  set wide enough to cover a very dense sketch will drop frames while it is
+  held.
 - Symmetry reflects across the **world** planes, so it reads most naturally
   when the sketch plane is aligned with the mirror axis (drawing on Front with
   X mirror, say). A symmetry origin you can move is a stage 2 item.

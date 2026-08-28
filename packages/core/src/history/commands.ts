@@ -5,6 +5,7 @@ import {
   type NodeId,
   type SceneNode,
   type SketchDocument,
+  type StrokeNode,
   type StrokeStyle,
 } from '../document/types.js';
 import {
@@ -19,6 +20,7 @@ import {
   type Affine,
 } from '../math/affine.js';
 import { normalize, type Vec3 } from '../math/vec3.js';
+import { type StrokeSample } from '../stroke/resample.js';
 import { type Command } from './history.js';
 
 export class AddNodeCommand implements Command {
@@ -707,5 +709,63 @@ export class TransformNodesCommand implements Command {
 export class TranslateNodesCommand extends TransformNodesCommand {
   constructor(ids: NodeId[], delta: Vec3) {
     super(ids, translation(delta), 'Move');
+  }
+}
+
+/**
+ * A stroke's centreline replaced with a reshaped one — the undo entry for a
+ * liquify gesture.
+ *
+ * The whole sample array is kept on both sides rather than a list of
+ * per-sample deltas. A warp is not invertible in the way an affine transform
+ * is: the brush that pushed a stroke sideways cannot be run backwards to
+ * recover it, because relaxing the spacing afterwards adds and removes samples
+ * as well as moving them. Holding both versions is a few kilobytes per stroke,
+ * and it is exact.
+ *
+ * Shape parameters are dropped for the same reason scaling drops them: a
+ * rectangle whose sides have been pushed out of true is no longer "80 by 50",
+ * and numbers that lie are worse than no numbers.
+ */
+export class ReshapeStrokesCommand implements Command {
+  readonly label: string;
+
+  constructor(
+    private readonly edits: Array<{
+      id: NodeId;
+      before: StrokeSample[];
+      after: StrokeSample[];
+      /** The shape description the stroke had before, restored on undo. */
+      shape: StrokeNode['shape'];
+    }>,
+    label?: string,
+  ) {
+    this.label = label ?? (edits.length === 1 ? 'Reshape' : `Reshape ${edits.length} strokes`);
+  }
+
+  apply(doc: SketchDocument): void {
+    this.write(doc, (edit) => ({ samples: edit.after, shape: undefined }));
+  }
+
+  revert(doc: SketchDocument): void {
+    this.write(doc, (edit) => ({ samples: edit.before, shape: edit.shape }));
+  }
+
+  private write(
+    doc: SketchDocument,
+    pick: (edit: {
+      before: StrokeSample[];
+      after: StrokeSample[];
+      shape: StrokeNode['shape'];
+    }) => { samples: StrokeSample[]; shape: StrokeNode['shape'] },
+  ): void {
+    for (const edit of this.edits) {
+      const node = doc.nodes.get(edit.id);
+      if (node?.type !== 'stroke') continue;
+      const next = pick(edit);
+      node.samples = next.samples;
+      node.shape = next.shape;
+    }
+    touch(doc);
   }
 }

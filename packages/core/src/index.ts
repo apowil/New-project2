@@ -23,6 +23,17 @@ export {
   mirrorSamples,
   mirrorVec3,
 } from './stroke/mirror.js';
+export { PREVIEW_RING_BUDGET, previewSamples } from './stroke/preview.js';
+export {
+  type LiquifyBrush,
+  type LiquifyMode,
+  densify,
+  falloff,
+  liquifySamples,
+  medianSpacing,
+  polylineWithin,
+  relaxSpacing,
+} from './stroke/liquify.js';
 export {
   type StrokeGeometry,
   type StrokeGeometryOptions,
